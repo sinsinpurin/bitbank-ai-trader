@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model AiDecisionLog {
+  id           String   @id @default(cuid())
+  pair         String
+  action       String // "buy" | "sell" | "hold"
+  confidence   Float
+  reasoning    String
+  model        String   @default("")
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  trades Trade[]
+}
+
+model Position {
+  id          String    @id @default(cuid())
+  pair        String
+  side        String // "buy" | "sell"
+  entryPrice  Float
+  amount      Float
+  openedAt    DateTime  @default(now())
+  closedAt    DateTime?
+  closePrice  Float?
+  pnl         Float?
+
+  trades Trade[]
+}
+
+model Trade {
+  id            String   @id @default(cuid())
+  pair          String
+  side          String // "buy" | "sell"
+  price         Float
+  amount        Float
+  executedAt    DateTime @default(now())
+
+  aiDecisionId String?
+  aiDecision   AiDecisionLog? @relation(fields: [aiDecisionId], references: [id])
+
+  positionId String?
+  position   Position? @relation(fields: [positionId], references: [id])
+}
+
+model VirtualBalance {
+  id        String   @id @default(cuid())
+  currency  String   @unique // "jpy" | "btc" など
+  amount    Float
+  updatedAt DateTime @updatedAt
+}

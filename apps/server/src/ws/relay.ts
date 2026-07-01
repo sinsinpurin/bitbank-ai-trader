@@ -1,0 +1,18 @@
+import type { WebSocket } from "ws";
+import type { ServerEvent } from "@bitbank-ai-trader/shared";
+
+const clients = new Set<WebSocket>();
+
+export function registerClient(socket: WebSocket) {
+  clients.add(socket);
+  socket.on("close", () => clients.delete(socket));
+}
+
+export function broadcast(event: ServerEvent) {
+  const payload = JSON.stringify(event);
+  for (const client of clients) {
+    if (client.readyState === client.OPEN) {
+      client.send(payload);
+    }
+  }
+}
