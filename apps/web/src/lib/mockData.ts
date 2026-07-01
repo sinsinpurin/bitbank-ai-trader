@@ -1,5 +1,5 @@
 import type { CandlestickData, UTCTimestamp } from "lightweight-charts";
-import type { AiDecision, Position } from "@bitbank-ai-trader/shared";
+import type { AiDecision, Position, Trade } from "@bitbank-ai-trader/shared";
 
 /** ダミーのローソク足データ生成(BTC/JPY風の値動き) */
 export function generateMockCandles(count = 120): CandlestickData[] {
@@ -72,5 +72,28 @@ export const mockPositions: Position[] = [
     closedAt: null,
     closePrice: null,
     pnl: null,
+  },
+];
+
+export const mockTrades: Trade[] = [
+  {
+    id: "t1",
+    pair: "btc_jpy",
+    side: "buy",
+    price: 9_780_500,
+    amount: 0.001,
+    executedAt: 1_782_899_900_000,
+    aiDecisionId: "1",
+    reason: "ai_decision",
+  },
+  {
+    id: "t2",
+    pair: "btc_jpy",
+    side: "sell",
+    price: 9_705_000,
+    amount: 0.0009,
+    executedAt: 1_782_899_600_000,
+    aiDecisionId: null,
+    reason: "stop_loss",
   },
 ];

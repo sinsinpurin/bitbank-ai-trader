@@ -151,6 +151,7 @@ export function startDecisionLoop() {
           amount: result.trade.amount,
           executedAt: result.trade.executedAt.getTime(),
           aiDecisionId: result.trade.aiDecisionId,
+          reason: result.trade.reason as Trade["reason"],
         };
         broadcast({ type: "trade", payload: tradeEvent });
       }

@@ -41,6 +41,9 @@ export interface Position {
   pnl: number | null;
 }
 
+/** 約定の発生理由。AIの売買判断によるものか、リスク管理の自動損切りによるものか */
+export type TradeReason = "ai_decision" | "stop_loss";
+
 /** ペーパートレードにおける仮想約定履歴 */
 export interface Trade {
   id: string;
@@ -50,6 +53,7 @@ export interface Trade {
   amount: number;
   executedAt: number;
   aiDecisionId: string | null;
+  reason: TradeReason;
 }
 
 /** Claudeによる売買判断結果 */

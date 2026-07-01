@@ -1,6 +1,6 @@
 :root {
-  --background: #05050a;
-  --foreground: #e8f9ff;
+  --background: #050403;
+  --foreground: #f0ecd6;
   color-scheme: dark;
 }
 
@@ -20,8 +20,8 @@ body {
   flex-direction: column;
   color: var(--foreground);
   background:
-    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(0, 255, 240, 0.12), transparent),
-    radial-gradient(ellipse 60% 40% at 90% 10%, rgba(255, 46, 230, 0.1), transparent),
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(243, 230, 0, 0.1), transparent),
+    radial-gradient(ellipse 60% 40% at 90% 10%, rgba(85, 234, 212, 0.1), transparent),
     var(--background);
   background-attachment: fixed;
   font-family: var(--font-rajdhani), sans-serif;

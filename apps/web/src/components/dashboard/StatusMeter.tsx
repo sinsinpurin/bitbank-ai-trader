@@ -33,7 +33,7 @@ export function StatusMeter({
 }: StatusMeterProps) {
   const bars = 10;
   const filled = Math.round(signalStrength * bars);
-  const barColor = signalStrength > 0.66 ? "#39ff88" : signalStrength > 0.33 ? "#ffd23f" : "#ff3860";
+  const barColor = signalStrength > 0.66 ? "#55ead4" : signalStrength > 0.33 ? "#f3e600" : "#c5003c";
 
   return (
     <Stack gap={4}>
@@ -46,8 +46,8 @@ export function StatusMeter({
             width="8px"
             height="8px"
             borderRadius="full"
-            bg={connected ? "#39ff88" : "#ff3860"}
-            boxShadow={`0 0 8px ${connected ? "#39ff88" : "#ff3860"}`}
+            bg={connected ? "#55ead4" : "#c5003c"}
+            boxShadow={`0 0 8px ${connected ? "#55ead4" : "#c5003c"}`}
           />
           <Text fontSize="sm" fontFamily="mono" color="whiteAlpha.900">
             {connectionLabel}
@@ -63,7 +63,7 @@ export function StatusMeter({
           fontSize="sm"
           fontFamily="heading"
           letterSpacing="0.05em"
-          color={mode === "paper" ? "#00fff0" : "#ff2ee6"}
+          color={mode === "paper" ? "#f3e600" : "#c5003c"}
         >
           {mode === "paper" ? "PAPER TRADE" : "LIVE"}
         </Text>
@@ -97,13 +97,13 @@ export function StatusMeter({
             <Text
               fontSize="sm"
               fontFamily="mono"
-              color={usage.budgetExceeded ? "#ff3860" : "#39ff88"}
+              color={usage.budgetExceeded ? "#c5003c" : "#55ead4"}
             >
               ¥{usage.estimatedCostJpy.toFixed(1)} / ¥{usage.dailyBudgetJpy}
             </Text>
           </HStack>
           {usage.budgetExceeded && (
-            <Text fontSize="xs" color="#ff3860">
+            <Text fontSize="xs" color="#c5003c">
               本日の予算上限に達したため、AI判断を一時停止中です
             </Text>
           )}

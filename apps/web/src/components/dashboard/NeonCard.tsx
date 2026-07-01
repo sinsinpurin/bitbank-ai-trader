@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 
 interface NeonCardProps extends BoxProps {
   title: string;
-  accent?: "cyan" | "magenta" | "violet" | "green";
+  accent?: "yellow" | "cyan" | "crimson" | "darkred";
   icon?: ReactNode;
   delay?: number;
   children: ReactNode;
@@ -16,10 +16,10 @@ const ACCENT: Record<
   NonNullable<NeonCardProps["accent"]>,
   { color: string; glow: string }
 > = {
-  cyan: { color: "#00fff0", glow: "rgba(0, 255, 240, 0.35)" },
-  magenta: { color: "#ff2ee6", glow: "rgba(255, 46, 230, 0.32)" },
-  violet: { color: "#7b5bff", glow: "rgba(123, 91, 255, 0.32)" },
-  green: { color: "#39ff88", glow: "rgba(57, 255, 136, 0.32)" },
+  yellow: { color: "#f3e600", glow: "rgba(243, 230, 0, 0.35)" },
+  cyan: { color: "#55ead4", glow: "rgba(85, 234, 212, 0.32)" },
+  crimson: { color: "#c5003c", glow: "rgba(197, 0, 60, 0.4)" },
+  darkred: { color: "#e0355f", glow: "rgba(136, 4, 37, 0.45)" },
 };
 
 export function NeonCard({
@@ -40,7 +40,7 @@ export function NeonCard({
     >
       <Box
         position="relative"
-        bg="#0b0c14"
+        bg="#0d0b08"
         borderWidth="1px"
         borderColor="whiteAlpha.200"
         borderRadius="lg"

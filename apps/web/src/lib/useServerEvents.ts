@@ -7,11 +7,14 @@ import type {
   AiUsageStats,
   Position,
   ServerEvent,
+  Trade,
 } from "@bitbank-ai-trader/shared";
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:4000/ws";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 const RECONNECT_DELAY_MS = 3000;
 const MAX_DECISIONS = 20;
+const MAX_TRADES = 30;
 
 function applyTickerToCandles(
   candles: CandlestickData[],
@@ -42,8 +45,22 @@ export function useServerEvents(seedCandles: CandlestickData[]) {
   const [candles, setCandles] = useState<CandlestickData[]>(seedCandles);
   const [aiDecisions, setAiDecisions] = useState<AiDecision[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
+  const [trades, setTrades] = useState<Trade[]>([]);
   const [usage, setUsage] = useState<AiUsageStats | null>(null);
   const seedRef = useRef(seedCandles);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_URL}/api/trades?limit=${MAX_TRADES}`)
+      .then((res) => (res.ok ? (res.json() as Promise<Trade[]>) : []))
+      .then((data) => {
+        if (!cancelled) setTrades(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let socket: WebSocket | null = null;
@@ -96,7 +113,7 @@ export function useServerEvents(seedCandles: CandlestickData[]) {
             setUsage(parsed.payload);
             break;
           case "trade":
-            // 現状ダッシュボードに専用の約定履歴表示は無いため受信のみ
+            setTrades((prev) => [parsed.payload, ...prev].slice(0, MAX_TRADES));
             break;
         }
       };
@@ -116,6 +133,7 @@ export function useServerEvents(seedCandles: CandlestickData[]) {
     candles: candles.length > 0 ? candles : seedRef.current,
     aiDecisions,
     positions,
+    trades,
     usage,
   };
 }

@@ -54,4 +54,12 @@ export const config = {
     // 円換算用の概算レート(正確な現在レートではなく見積もり用の概算値)
     usdJpyRate: Number(process.env.AI_USD_JPY_RATE ?? 155),
   },
+  risk: {
+    // 1ポジションあたりの上限金額(円)。この金額をもとに購入数量を算出する
+    maxPositionJpy: Number(process.env.AI_MAX_POSITION_JPY ?? 30_000),
+    // 同時に保有できる未決済ポジション数の上限
+    maxOpenPositions: Number(process.env.AI_MAX_OPEN_POSITIONS ?? 3),
+    // この含み損率(%)に達したらAIの判断を待たず自動的に成行決済する
+    stopLossPct: Number(process.env.AI_STOP_LOSS_PCT ?? 3),
+  },
 };

@@ -41,6 +41,7 @@ model Trade {
   side          String // "buy" | "sell"
   price         Float
   amount        Float
+  reason        String   @default("ai_decision") // "ai_decision" | "stop_loss"
   executedAt    DateTime @default(now())
 
   aiDecisionId String?

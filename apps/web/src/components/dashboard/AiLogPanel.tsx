@@ -4,9 +4,9 @@ import { Badge, Box, HStack, Stack, Text } from "@chakra-ui/react";
 import type { AiDecision } from "@bitbank-ai-trader/shared";
 
 const ACTION_STYLE: Record<AiDecision["action"], { label: string; color: string }> = {
-  buy: { label: "BUY", color: "#39ff88" },
-  sell: { label: "SELL", color: "#ff3860" },
-  hold: { label: "HOLD", color: "#ffd23f" },
+  buy: { label: "BUY", color: "#55ead4" },
+  sell: { label: "SELL", color: "#c5003c" },
+  hold: { label: "HOLD", color: "#f3e600" },
 };
 
 function formatTime(ts: number) {

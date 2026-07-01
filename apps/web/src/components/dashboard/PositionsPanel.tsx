@@ -41,13 +41,13 @@ export function PositionsPanel({
             borderColor="whiteAlpha.100"
           >
             <HStack justify="space-between">
-              <Text fontFamily="heading" fontSize="sm" color="#00fff0">
+              <Text fontFamily="heading" fontSize="sm" color="#f3e600">
                 {position.pair.toUpperCase()} / {position.side.toUpperCase()}
               </Text>
               <Text
                 fontFamily="mono"
                 fontSize="sm"
-                color={isProfit ? "#39ff88" : "#ff3860"}
+                color={isProfit ? "#55ead4" : "#c5003c"}
               >
                 {isProfit ? "+" : ""}
                 {formatJpy(unrealizedPnl)}

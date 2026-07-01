@@ -5,17 +5,19 @@ import { NeonCard } from "@/components/dashboard/NeonCard";
 import { PriceChart } from "@/components/dashboard/PriceChart";
 import { AiLogPanel } from "@/components/dashboard/AiLogPanel";
 import { PositionsPanel } from "@/components/dashboard/PositionsPanel";
+import { TradeHistoryPanel } from "@/components/dashboard/TradeHistoryPanel";
 import { StatusMeter } from "@/components/dashboard/StatusMeter";
-import { generateMockCandles, mockAiDecisions, mockPositions } from "@/lib/mockData";
+import { generateMockCandles, mockAiDecisions, mockPositions, mockTrades } from "@/lib/mockData";
 import { useServerEvents } from "@/lib/useServerEvents";
 
 const seedCandles = generateMockCandles();
 
 export default function DashboardPage() {
-  const { connected, candles, aiDecisions, positions, usage } = useServerEvents(seedCandles);
+  const { connected, candles, aiDecisions, positions, trades, usage } = useServerEvents(seedCandles);
 
   const displayDecisions = aiDecisions.length > 0 ? aiDecisions : mockAiDecisions;
   const displayPositions = positions.length > 0 ? positions : mockPositions;
+  const displayTrades = trades.length > 0 ? trades : mockTrades;
   const currentPrice = candles[candles.length - 1]?.close ?? seedCandles[seedCandles.length - 1].close;
 
   return (
@@ -26,8 +28,8 @@ export default function DashboardPage() {
             fontFamily="heading"
             fontSize={{ base: "2xl", md: "3xl" }}
             letterSpacing="0.06em"
-            color="#00fff0"
-            css={{ textShadow: "0 0 16px rgba(0,255,240,0.5)" }}
+            color="#f3e600"
+            css={{ textShadow: "0 0 16px rgba(243,230,0,0.5)" }}
           >
             BITBANK AI TRADER
           </Heading>
@@ -45,7 +47,7 @@ export default function DashboardPage() {
         </GridItem>
 
         <GridItem>
-          <NeonCard title="System Status" accent="green" delay={0.1}>
+          <NeonCard title="System Status" accent="yellow" delay={0.1}>
             <StatusMeter
               connectionLabel={connected ? "STREAM CONNECTED" : "DISCONNECTED"}
               connected={connected}
@@ -57,14 +59,20 @@ export default function DashboardPage() {
         </GridItem>
 
         <GridItem>
-          <NeonCard title="AI Decision Log" accent="magenta" delay={0.15}>
+          <NeonCard title="AI Decision Log" accent="crimson" delay={0.15}>
             <AiLogPanel decisions={displayDecisions} />
           </NeonCard>
         </GridItem>
 
         <GridItem>
-          <NeonCard title="Positions / P&L" accent="violet" delay={0.2}>
+          <NeonCard title="Positions / P&L" accent="darkred" delay={0.2}>
             <PositionsPanel positions={displayPositions} currentPrice={currentPrice} />
+          </NeonCard>
+        </GridItem>
+
+        <GridItem colSpan={{ base: 1, xl: 2 }}>
+          <NeonCard title="Trade History" accent="yellow" delay={0.25}>
+            <TradeHistoryPanel trades={displayTrades} />
           </NeonCard>
         </GridItem>
       </Grid>
