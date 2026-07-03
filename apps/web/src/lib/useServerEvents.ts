@@ -5,6 +5,7 @@ import type { CandlestickData, UTCTimestamp } from "lightweight-charts";
 import type {
   AiDecision,
   AiUsageStats,
+  BotSignal,
   Position,
   ServerEvent,
   Trade,
@@ -15,6 +16,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 const RECONNECT_DELAY_MS = 3000;
 const MAX_DECISIONS = 20;
 const MAX_TRADES = 30;
+const MAX_BOT_SIGNALS = 20;
 
 function applyTickerToCandles(
   candles: CandlestickData[],
@@ -47,6 +49,7 @@ export function useServerEvents(seedCandles: CandlestickData[]) {
   const [positions, setPositions] = useState<Position[]>([]);
   const [trades, setTrades] = useState<Trade[]>([]);
   const [usage, setUsage] = useState<AiUsageStats | null>(null);
+  const [botSignals, setBotSignals] = useState<BotSignal[]>([]);
   const seedRef = useRef(seedCandles);
 
   useEffect(() => {
@@ -115,6 +118,9 @@ export function useServerEvents(seedCandles: CandlestickData[]) {
           case "trade":
             setTrades((prev) => [parsed.payload, ...prev].slice(0, MAX_TRADES));
             break;
+          case "bot_signal":
+            setBotSignals((prev) => [parsed.payload, ...prev].slice(0, MAX_BOT_SIGNALS));
+            break;
         }
       };
     };
@@ -135,5 +141,6 @@ export function useServerEvents(seedCandles: CandlestickData[]) {
     positions,
     trades,
     usage,
+    botSignals,
   };
 }

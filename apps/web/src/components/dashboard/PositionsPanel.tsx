@@ -18,7 +18,7 @@ export function PositionsPanel({
 
   if (openPositions.length === 0) {
     return (
-      <Text fontSize="sm" color="whiteAlpha.500">
+      <Text fontSize="sm" color="text.disabled">
         現在保有中の仮想ポジションはありません。
       </Text>
     );
@@ -34,30 +34,36 @@ export function PositionsPanel({
         return (
           <Box
             key={position.id}
-            bg="whiteAlpha.50"
-            borderRadius="md"
+            bg="bg.surfaceRaised"
             p={3}
             borderWidth="1px"
-            borderColor="whiteAlpha.100"
+            borderColor={isProfit ? "border.gridCyan" : "border.grid"}
           >
             <HStack justify="space-between">
-              <Text fontFamily="heading" fontSize="sm" color="#f3e600">
+              <Text
+                fontFamily="heading"
+                fontSize="11px"
+                fontWeight="600"
+                letterSpacing="0.14em"
+                textTransform="uppercase"
+                color="text.primary"
+              >
                 {position.pair.toUpperCase()} / {position.side.toUpperCase()}
               </Text>
               <Text
                 fontFamily="mono"
                 fontSize="sm"
-                color={isProfit ? "#55ead4" : "#c5003c"}
+                color={isProfit ? "signal.green" : "signal.red"}
               >
                 {isProfit ? "+" : ""}
                 {formatJpy(unrealizedPnl)}
               </Text>
             </HStack>
             <HStack justify="space-between" mt={1}>
-              <Text fontSize="xs" color="whiteAlpha.600">
+              <Text fontSize="xs" color="text.secondary" fontFamily="mono">
                 建値 {formatJpy(position.entryPrice)}
               </Text>
-              <Text fontSize="xs" color="whiteAlpha.600">
+              <Text fontSize="xs" color="text.secondary" fontFamily="mono">
                 数量 {position.amount} BTC
               </Text>
             </HStack>

@@ -1,3 +1,6 @@
+export * from "./indicators";
+export * from "./evaluator";
+
 export type Pair = string; // 例: "btc_jpy"
 
 export type OrderSide = "buy" | "sell";
@@ -41,8 +44,8 @@ export interface Position {
   pnl: number | null;
 }
 
-/** 約定の発生理由。AIの売買判断によるものか、リスク管理の自動損切りによるものか */
-export type TradeReason = "ai_decision" | "stop_loss";
+/** 約定の発生理由。AIの売買判断・リスク管理の自動損切り・Bot戦略のいずれか */
+export type TradeReason = "ai_decision" | "stop_loss" | "bot_strategy";
 
 /** ペーパートレードにおける仮想約定履歴 */
 export interface Trade {
@@ -78,10 +81,89 @@ export interface AiUsageStats {
   budgetExceeded: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// Bot戦略(ブループリント型ノードグラフ)
+// ---------------------------------------------------------------------------
+
+/**
+ * 戦略グラフのノード種別。
+ * - source: price(終値シリーズ), constant(定数)
+ * - indicator: sma / ema / rsi(数値シリーズ → 数値シリーズ)
+ * - condition: compare(大小比較), cross(クロス判定)
+ * - logic: and / or / not(真偽シリーズの合成)
+ * - action: buy / sell(条件の立ち上がりで発注)
+ */
+export type StrategyNodeType =
+  | "price"
+  | "constant"
+  | "sma"
+  | "ema"
+  | "rsi"
+  | "compare"
+  | "cross"
+  | "logic"
+  | "buy"
+  | "sell";
+
+export type CompareOp = "gt" | "lt" | "gte" | "lte";
+export type CrossOp = "cross_above" | "cross_below";
+export type LogicOp = "and" | "or" | "not";
+
+/** ノードのパラメータ。種別ごとに使用するキーが異なる(例: sma→period, compare→op) */
+export type StrategyNodeParams = Record<string, number | string>;
+
+export interface StrategyNode {
+  id: string;
+  type: StrategyNodeType;
+  params: StrategyNodeParams;
+  /** エディタ(React Flow)上の表示座標 */
+  position: { x: number; y: number };
+}
+
+export interface StrategyEdge {
+  id: string;
+  source: string;
+  /** 出力ハンドルID(通常 "out") */
+  sourceHandle?: string | null;
+  target: string;
+  /** 入力ハンドルID("in" | "a" | "b" | "condition") */
+  targetHandle?: string | null;
+}
+
+export interface StrategyGraph {
+  nodes: StrategyNode[];
+  edges: StrategyEdge[];
+}
+
+export interface Strategy {
+  id: string;
+  name: string;
+  description: string;
+  graph: StrategyGraph;
+  isActive: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** Bot戦略が発火したシグナル。executed=falseはリスク制約等で発注を見送ったことを示す */
+export interface BotSignal {
+  id: string;
+  strategyId: string;
+  strategyName: string;
+  pair: Pair;
+  action: OrderSide;
+  price: number;
+  triggeredAt: number;
+  executed: boolean;
+  note: string;
+}
+
 /** WebSocketでサーバーからフロントへ配信するメッセージの共通形式 */
 export type ServerEvent =
   | { type: "ticker"; payload: Ticker }
   | { type: "ai_decision"; payload: AiDecision }
   | { type: "trade"; payload: Trade }
   | { type: "position_update"; payload: Position }
-  | { type: "usage_stats"; payload: AiUsageStats };
+  | { type: "usage_stats"; payload: AiUsageStats }
+  | { type: "bot_signal"; payload: BotSignal }
+  | { type: "strategy_update"; payload: Strategy };

@@ -1,12 +1,12 @@
 "use client";
 
-import { Badge, Box, HStack, Stack, Text } from "@chakra-ui/react";
+import { Box, HStack, Stack, Text } from "@chakra-ui/react";
 import type { AiDecision } from "@bitbank-ai-trader/shared";
 
 const ACTION_STYLE: Record<AiDecision["action"], { label: string; color: string }> = {
-  buy: { label: "BUY", color: "#55ead4" },
-  sell: { label: "SELL", color: "#c5003c" },
-  hold: { label: "HOLD", color: "#f3e600" },
+  buy: { label: "BUY", color: "#39FF88" },
+  sell: { label: "SELL", color: "#FF003C" },
+  hold: { label: "HOLD", color: "#9A9AA6" },
 };
 
 function formatTime(ts: number) {
@@ -25,33 +25,40 @@ export function AiLogPanel({ decisions }: { decisions: AiDecision[] }) {
           return (
             <Box
               key={decision.id}
-              borderLeftWidth="3px"
-              borderLeftColor={style.color}
-              bg="whiteAlpha.50"
-              borderRadius="md"
+              position="relative"
+              bg="bg.surfaceRaised"
               p={3}
+              pl={4}
+              _before={{
+                content: '""',
+                position: "absolute",
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: "4px",
+                bg: style.color,
+              }}
             >
               <HStack justify="space-between" mb={1}>
-                <HStack gap={2}>
-                  <Badge
-                    bg="transparent"
-                    color={style.color}
-                    borderWidth="1px"
-                    borderColor={style.color}
+                <HStack gap={3}>
+                  <Text
                     fontFamily="heading"
-                    letterSpacing="0.05em"
+                    fontSize="11px"
+                    fontWeight="600"
+                    letterSpacing="0.14em"
+                    color={style.color}
                   >
                     {style.label}
-                  </Badge>
-                  <Text fontSize="xs" color="whiteAlpha.600">
-                    信頼度 {Math.round(decision.confidence * 100)}%
+                  </Text>
+                  <Text fontSize="xs" color="text.secondary" fontFamily="mono">
+                    CONF {Math.round(decision.confidence * 100)}%
                   </Text>
                 </HStack>
-                <Text fontSize="xs" color="whiteAlpha.500" fontFamily="mono">
+                <Text fontSize="xs" color="text.disabled" fontFamily="mono">
                   {formatTime(decision.createdAt)}
                 </Text>
               </HStack>
-              <Text fontSize="sm" color="whiteAlpha.900">
+              <Text fontSize="sm" color="text.primary">
                 {decision.reasoning}
               </Text>
             </Box>

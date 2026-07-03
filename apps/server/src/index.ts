@@ -7,6 +7,13 @@ import { subscribeTicker } from "./bitbank/publicStream";
 import { registerClient, broadcast } from "./ws/relay";
 import { recordPrice, startDecisionLoop } from "./ai/decisionLoop";
 import { checkStopLosses } from "./trading/riskManager";
+import {
+  getCandleHistory,
+  onTick,
+  reloadActiveStrategies,
+  seedCandleHistory,
+} from "./strategy/botEngine";
+import { strategyRoutes } from "./strategy/routes";
 import type { Trade } from "@bitbank-ai-trader/shared";
 
 async function main() {
@@ -37,17 +44,35 @@ async function main() {
     );
   });
 
+  // Bot/エディタ共用の1分足終値履歴(エディタのライブ評価に使う)
+  app.get("/api/candles", async () => {
+    const candles = getCandleHistory();
+    return {
+      pair: config.targetPair,
+      times: candles.map((c) => c.time),
+      closes: candles.map((c) => c.close),
+    };
+  });
+
+  await app.register(strategyRoutes);
+
   app.register(async (instance) => {
     instance.get("/ws", { websocket: true }, (socket) => {
       registerClient(socket);
     });
   });
 
+  await reloadActiveStrategies();
+  await seedCandleHistory(config.targetPair);
+
   subscribeTicker(config.targetPair, (ticker) => {
     recordPrice(ticker.last);
     broadcast({ type: "ticker", payload: ticker });
     checkStopLosses(ticker.pair, ticker.last).catch((err) =>
       app.log.error(err, "損切りチェックに失敗しました")
+    );
+    onTick(ticker.pair, ticker.last, ticker.timestamp).catch((err) =>
+      app.log.error(err, "Bot戦略の評価に失敗しました")
     );
   });
 

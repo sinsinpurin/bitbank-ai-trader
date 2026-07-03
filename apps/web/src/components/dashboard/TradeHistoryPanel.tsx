@@ -1,16 +1,17 @@
 "use client";
 
-import { Badge, Box, HStack, Stack, Text } from "@chakra-ui/react";
+import { Box, HStack, Stack, Text } from "@chakra-ui/react";
 import type { Trade } from "@bitbank-ai-trader/shared";
 
 const SIDE_STYLE: Record<Trade["side"], { label: string; color: string }> = {
-  buy: { label: "BUY", color: "#55ead4" },
-  sell: { label: "SELL", color: "#c5003c" },
+  buy: { label: "BUY", color: "#39FF88" },
+  sell: { label: "SELL", color: "#FF003C" },
 };
 
 const REASON_LABEL: Record<Trade["reason"], string> = {
   ai_decision: "AI判断",
   stop_loss: "損切り",
+  bot_strategy: "BOT戦略",
 };
 
 function formatJpy(value: number) {
@@ -24,7 +25,7 @@ function formatTime(ts: number) {
 export function TradeHistoryPanel({ trades }: { trades: Trade[] }) {
   if (trades.length === 0) {
     return (
-      <Text fontSize="sm" color="whiteAlpha.500">
+      <Text fontSize="sm" color="text.disabled">
         約定履歴はまだありません。
       </Text>
     );
@@ -37,39 +38,51 @@ export function TradeHistoryPanel({ trades }: { trades: Trade[] }) {
         return (
           <Box
             key={trade.id}
-            borderLeftWidth="3px"
-            borderLeftColor={style.color}
-            bg="whiteAlpha.50"
-            borderRadius="md"
+            position="relative"
+            bg="bg.surfaceRaised"
             p={2.5}
+            pl={4}
+            _before={{
+              content: '""',
+              position: "absolute",
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: "4px",
+              bg: style.color,
+            }}
           >
             <HStack justify="space-between">
-              <HStack gap={2}>
-                <Badge
-                  bg="transparent"
-                  color={style.color}
-                  borderWidth="1px"
-                  borderColor={style.color}
+              <HStack gap={3}>
+                <Text
                   fontFamily="heading"
-                  letterSpacing="0.05em"
+                  fontSize="11px"
+                  fontWeight="600"
+                  letterSpacing="0.14em"
+                  color={style.color}
                 >
                   {style.label}
-                </Badge>
-                {trade.reason === "stop_loss" && (
-                  <Badge bg="transparent" color="#880425" borderWidth="1px" borderColor="#880425">
+                </Text>
+                {trade.reason !== "ai_decision" && (
+                  <Text
+                    fontFamily="heading"
+                    fontSize="10px"
+                    letterSpacing="0.12em"
+                    color={trade.reason === "stop_loss" ? "signal.orange" : "signal.cyan"}
+                  >
                     {REASON_LABEL[trade.reason]}
-                  </Badge>
+                  </Text>
                 )}
               </HStack>
-              <Text fontSize="xs" color="whiteAlpha.500" fontFamily="mono">
+              <Text fontSize="xs" color="text.disabled" fontFamily="mono">
                 {formatTime(trade.executedAt)}
               </Text>
             </HStack>
             <HStack justify="space-between" mt={1}>
-              <Text fontSize="sm" color="whiteAlpha.900" fontFamily="mono">
+              <Text fontSize="sm" color="text.primary" fontFamily="mono">
                 {formatJpy(trade.price)}
               </Text>
-              <Text fontSize="xs" color="whiteAlpha.600">
+              <Text fontSize="xs" color="text.secondary" fontFamily="mono">
                 数量 {trade.amount.toFixed(5)} BTC
               </Text>
             </HStack>

@@ -1,6 +1,20 @@
 :root {
-  --background: #050403;
-  --foreground: #f0ecd6;
+  /* Cyberpsycho UI — Night City Interface Standard */
+  --bg-void: #0a0a0d;
+  --bg-surface: #131318;
+  --bg-surface-raised: #1c1c24;
+  --border-grid: rgba(255, 0, 60, 0.22);
+  --border-grid-cyan: rgba(0, 229, 255, 0.22);
+  --signal-red: #ff003c;
+  --signal-red-dim: #b4002a;
+  --signal-cyan: #00e5ff;
+  --signal-cyan-dim: #00a8bc;
+  --signal-yellow: #fcee0a;
+  --signal-green: #39ff88;
+  --signal-orange: #ff8a1e;
+  --text-primary: #f2f2f5;
+  --text-secondary: #9a9aa6;
+  --text-disabled: #4b4b55;
   color-scheme: dark;
 }
 
@@ -18,15 +32,28 @@ body {
   min-height: 100%;
   display: flex;
   flex-direction: column;
-  color: var(--foreground);
-  background:
-    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(243, 230, 0, 0.1), transparent),
-    radial-gradient(ellipse 60% 40% at 90% 10%, rgba(85, 234, 212, 0.1), transparent),
-    var(--background);
-  background-attachment: fixed;
-  font-family: var(--font-rajdhani), sans-serif;
+  color: var(--text-primary);
+  background: var(--bg-void);
+  font-family: var(--font-inter), sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  position: relative;
+}
+
+/* 静的スキャンライン(常時アニメーションはさせない) */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(255, 255, 255, 0.025) 0px,
+    rgba(255, 255, 255, 0.025) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  pointer-events: none;
+  z-index: 1;
 }
 
 * {
@@ -38,4 +65,18 @@ body {
 a {
   color: inherit;
   text-decoration: none;
+}
+
+/* HUD向けの細いスクロールバー */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--signal-cyan-dim);
 }

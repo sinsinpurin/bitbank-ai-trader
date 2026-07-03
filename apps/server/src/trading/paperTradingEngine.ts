@@ -62,36 +62,40 @@ export async function closePosition(
 }
 
 /**
- * AIの判断(buy/sell/hold)を受け取り、仮想残高・ポジション・約定履歴を更新する。
- * 実際の注文APIへの発注は一切行わない。
- * リスク管理(ポジションサイズ上限・最大同時保有数)は config.risk に従う。
+ * 未決済の最古ポジションを現在値で成行決済する。
+ * ポジションが無い場合は何もしない。AI判断・Bot戦略の売りシグナル双方から呼ばれる。
  */
-export async function applyAiDecision(
+export async function closeOldestPosition(
   pair: string,
   currentPrice: number,
-  decision: AiDecisionResult,
-  aiDecisionLogId: string
+  reason: TradeReason,
+  aiDecisionLogId?: string
 ) {
-  await ensureInitialBalance();
+  const openPosition = await prisma.position.findFirst({
+    where: { pair, side: "buy", closedAt: null },
+    orderBy: { openedAt: "asc" },
+  });
 
-  if (decision.action === "hold") {
+  if (!openPosition) {
     return { trade: null, position: null };
   }
 
-  if (decision.action === "sell") {
-    const openPosition = await prisma.position.findFirst({
-      where: { pair, side: "buy", closedAt: null },
-      orderBy: { openedAt: "asc" },
-    });
+  return closePosition(openPosition, currentPrice, reason, aiDecisionLogId);
+}
 
-    if (!openPosition) {
-      return { trade: null, position: null };
-    }
+/**
+ * 新規の買いポジションを建てる。
+ * リスク管理(ポジションサイズ上限・最大同時保有数・残高)は config.risk に従い、
+ * 制約に掛かった場合は何もせず null を返す。
+ */
+export async function openBuyPosition(
+  pair: string,
+  currentPrice: number,
+  reason: TradeReason,
+  aiDecisionLogId?: string
+) {
+  await ensureInitialBalance();
 
-    return closePosition(openPosition, currentPrice, "ai_decision", aiDecisionLogId);
-  }
-
-  // buy: ポジションサイズ上限・最大同時保有数のリスク制約を適用する
   const openPositionCount = await prisma.position.count({
     where: { pair, side: "buy", closedAt: null },
   });
@@ -129,11 +133,32 @@ export async function applyAiDecision(
         side: "buy",
         price: currentPrice,
         amount,
-        reason: "ai_decision",
+        reason,
         aiDecisionId: aiDecisionLogId,
       },
     }),
   ]);
 
   return { trade, position };
+}
+
+/**
+ * AIの判断(buy/sell/hold)を受け取り、仮想残高・ポジション・約定履歴を更新する。
+ * 実際の注文APIへの発注は一切行わない。
+ */
+export async function applyAiDecision(
+  pair: string,
+  currentPrice: number,
+  decision: AiDecisionResult,
+  aiDecisionLogId: string
+) {
+  if (decision.action === "hold") {
+    return { trade: null, position: null };
+  }
+
+  if (decision.action === "sell") {
+    return closeOldestPosition(pair, currentPrice, "ai_decision", aiDecisionLogId);
+  }
+
+  return openBuyPosition(pair, currentPrice, "ai_decision", aiDecisionLogId);
 }

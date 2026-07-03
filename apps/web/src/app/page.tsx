@@ -1,7 +1,8 @@
 "use client";
 
-import { Box, Grid, GridItem, Heading, HStack, Text } from "@chakra-ui/react";
-import { NeonCard } from "@/components/dashboard/NeonCard";
+import { Box, Grid, GridItem } from "@chakra-ui/react";
+import { AppHeader } from "@/components/ui/AppHeader";
+import { CyberPanel } from "@/components/ui/CyberPanel";
 import { PriceChart } from "@/components/dashboard/PriceChart";
 import { AiLogPanel } from "@/components/dashboard/AiLogPanel";
 import { PositionsPanel } from "@/components/dashboard/PositionsPanel";
@@ -21,61 +22,48 @@ export default function DashboardPage() {
   const currentPrice = candles[candles.length - 1]?.close ?? seedCandles[seedCandles.length - 1].close;
 
   return (
-    <Box minH="100vh" px={{ base: 4, md: 10 }} py={8}>
-      <HStack justify="space-between" mb={8} align="flex-end" flexWrap="wrap" gap={4}>
-        <Box>
-          <Heading
-            fontFamily="heading"
-            fontSize={{ base: "2xl", md: "3xl" }}
-            letterSpacing="0.06em"
-            color="#f3e600"
-            css={{ textShadow: "0 0 16px rgba(243,230,0,0.5)" }}
-          >
-            BITBANK AI TRADER
-          </Heading>
-          <Text fontSize="sm" color="whiteAlpha.600" mt={1}>
-            Claude搭載 AI売買判断ダッシュボード ― BTC/JPY ペーパートレード
-          </Text>
-        </Box>
-      </HStack>
+    <Box minH="100vh">
+      <AppHeader connected={connected} />
 
-      <Grid templateColumns={{ base: "1fr", xl: "2fr 1fr" }} gap={6}>
-        <GridItem>
-          <NeonCard title="Price Chart / BTC_JPY" accent="cyan" delay={0}>
-            <PriceChart data={candles} />
-          </NeonCard>
-        </GridItem>
+      <Box px={{ base: 4, md: 10 }} py={8}>
+        <Grid templateColumns={{ base: "1fr", xl: "2fr 1fr" }} gap={6}>
+          <GridItem>
+            <CyberPanel title="Price Chart / BTC_JPY" code="01 / MARKET" accent="cyan" delay={0}>
+              <PriceChart data={candles} />
+            </CyberPanel>
+          </GridItem>
 
-        <GridItem>
-          <NeonCard title="System Status" accent="yellow" delay={0.1}>
-            <StatusMeter
-              connectionLabel={connected ? "STREAM CONNECTED" : "DISCONNECTED"}
-              connected={connected}
-              signalStrength={0.78}
-              mode="paper"
-              usage={usage}
-            />
-          </NeonCard>
-        </GridItem>
+          <GridItem>
+            <CyberPanel title="System Status" code="02 / SYS" accent="cyan" delay={0.05}>
+              <StatusMeter
+                connectionLabel={connected ? "STREAM CONNECTED" : "DISCONNECTED"}
+                connected={connected}
+                signalStrength={0.78}
+                mode="paper"
+                usage={usage}
+              />
+            </CyberPanel>
+          </GridItem>
 
-        <GridItem>
-          <NeonCard title="AI Decision Log" accent="crimson" delay={0.15}>
-            <AiLogPanel decisions={displayDecisions} />
-          </NeonCard>
-        </GridItem>
+          <GridItem>
+            <CyberPanel title="AI Decision Log" code="03 / LOG" accent="cyan" delay={0.1}>
+              <AiLogPanel decisions={displayDecisions} />
+            </CyberPanel>
+          </GridItem>
 
-        <GridItem>
-          <NeonCard title="Positions / P&L" accent="darkred" delay={0.2}>
-            <PositionsPanel positions={displayPositions} currentPrice={currentPrice} />
-          </NeonCard>
-        </GridItem>
+          <GridItem>
+            <CyberPanel title="Positions / P&L" code="04 / POS" accent="red" delay={0.15}>
+              <PositionsPanel positions={displayPositions} currentPrice={currentPrice} />
+            </CyberPanel>
+          </GridItem>
 
-        <GridItem colSpan={{ base: 1, xl: 2 }}>
-          <NeonCard title="Trade History" accent="yellow" delay={0.25}>
-            <TradeHistoryPanel trades={displayTrades} />
-          </NeonCard>
-        </GridItem>
-      </Grid>
+          <GridItem colSpan={{ base: 1, xl: 2 }}>
+            <CyberPanel title="Trade History" code="05 / EXEC" accent="cyan" delay={0.2}>
+              <TradeHistoryPanel trades={displayTrades} />
+            </CyberPanel>
+          </GridItem>
+        </Grid>
+      </Box>
     </Box>
   );
 }

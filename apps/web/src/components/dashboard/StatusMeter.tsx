@@ -2,6 +2,7 @@
 
 import { Box, HStack, Stack, Text } from "@chakra-ui/react";
 import type { AiUsageStats } from "@bitbank-ai-trader/shared";
+import { ZoneTag } from "@/components/ui/ZoneTag";
 
 interface StatusMeterProps {
   connectionLabel: string;
@@ -16,10 +17,9 @@ function Bar({ active, color }: { active: boolean; color: string }) {
     <Box
       flex="1"
       height="10px"
-      borderRadius="sm"
-      bg={active ? color : "whiteAlpha.100"}
-      boxShadow={active ? `0 0 8px ${color}` : "none"}
-      transition="all 0.3s"
+      bg={active ? color : "bg.surfaceRaised"}
+      boxShadow={active ? `0 0 6px ${color}` : "none"}
+      transition="all 240ms cubic-bezier(.16,1,.3,1)"
     />
   );
 }
@@ -33,12 +33,13 @@ export function StatusMeter({
 }: StatusMeterProps) {
   const bars = 10;
   const filled = Math.round(signalStrength * bars);
-  const barColor = signalStrength > 0.66 ? "#55ead4" : signalStrength > 0.33 ? "#f3e600" : "#c5003c";
+  const barColor =
+    signalStrength > 0.66 ? "#39FF88" : signalStrength > 0.33 ? "#FF8A1E" : "#FF003C";
 
   return (
     <Stack gap={4}>
       <HStack justify="space-between">
-        <Text fontSize="sm" color="whiteAlpha.700">
+        <Text fontSize="sm" color="text.secondary">
           接続状態
         </Text>
         <HStack gap={2}>
@@ -46,31 +47,27 @@ export function StatusMeter({
             width="8px"
             height="8px"
             borderRadius="full"
-            bg={connected ? "#55ead4" : "#c5003c"}
-            boxShadow={`0 0 8px ${connected ? "#55ead4" : "#c5003c"}`}
+            bg={connected ? "signal.green" : "signal.red"}
+            boxShadow={`0 0 8px ${connected ? "rgba(57,255,136,.6)" : "rgba(255,0,60,.6)"}`}
           />
-          <Text fontSize="sm" fontFamily="mono" color="whiteAlpha.900">
+          <Text fontSize="sm" fontFamily="mono" color="text.primary">
             {connectionLabel}
           </Text>
         </HStack>
       </HStack>
 
       <HStack justify="space-between">
-        <Text fontSize="sm" color="whiteAlpha.700">
+        <Text fontSize="sm" color="text.secondary">
           動作モード
         </Text>
-        <Text
-          fontSize="sm"
-          fontFamily="heading"
-          letterSpacing="0.05em"
-          color={mode === "paper" ? "#f3e600" : "#c5003c"}
-        >
-          {mode === "paper" ? "PAPER TRADE" : "LIVE"}
-        </Text>
+        <ZoneTag
+          label={mode === "paper" ? "Mode : Paper" : "Mode : Live"}
+          tone={mode === "paper" ? "cyan" : "red"}
+        />
       </HStack>
 
       <Stack gap={1}>
-        <Text fontSize="sm" color="whiteAlpha.700">
+        <Text fontSize="sm" color="text.secondary">
           シグナル強度
         </Text>
         <HStack gap={1}>
@@ -81,29 +78,29 @@ export function StatusMeter({
       </Stack>
 
       {usage && (
-        <Stack gap={1} pt={2} borderTopWidth="1px" borderTopColor="whiteAlpha.100">
+        <Stack gap={1} pt={2} borderTopWidth="1px" borderTopColor="border.gridCyan">
           <HStack justify="space-between">
-            <Text fontSize="sm" color="whiteAlpha.700">
+            <Text fontSize="sm" color="text.secondary">
               本日のAI利用({usage.model})
             </Text>
-            <Text fontSize="xs" color="whiteAlpha.500" fontFamily="mono">
+            <Text fontSize="xs" color="text.secondary" fontFamily="mono">
               {usage.callCount}回
             </Text>
           </HStack>
           <HStack justify="space-between">
-            <Text fontSize="xs" color="whiteAlpha.600" fontFamily="mono">
+            <Text fontSize="xs" color="text.secondary" fontFamily="mono">
               {(usage.inputTokens + usage.outputTokens).toLocaleString("ja-JP")} tok
             </Text>
             <Text
               fontSize="sm"
               fontFamily="mono"
-              color={usage.budgetExceeded ? "#c5003c" : "#55ead4"}
+              color={usage.budgetExceeded ? "signal.red" : "signal.cyan"}
             >
               ¥{usage.estimatedCostJpy.toFixed(1)} / ¥{usage.dailyBudgetJpy}
             </Text>
           </HStack>
           {usage.budgetExceeded && (
-            <Text fontSize="xs" color="#c5003c">
+            <Text fontSize="xs" color="signal.orange">
               本日の予算上限に達したため、AI判断を一時停止中です
             </Text>
           )}

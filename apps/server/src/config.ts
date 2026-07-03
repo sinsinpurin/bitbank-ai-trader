@@ -54,6 +54,10 @@ export const config = {
     // 円換算用の概算レート(正確な現在レートではなく見積もり用の概算値)
     usdJpyRate: Number(process.env.AI_USD_JPY_RATE ?? 155),
   },
+  bot: {
+    // 同一戦略が連続発火するのを防ぐ最短間隔
+    cooldownMs: Number(process.env.BOT_COOLDOWN_MS ?? 60_000),
+  },
   risk: {
     // 1ポジションあたりの上限金額(円)。この金額をもとに購入数量を算出する
     maxPositionJpy: Number(process.env.AI_MAX_POSITION_JPY ?? 30_000),
