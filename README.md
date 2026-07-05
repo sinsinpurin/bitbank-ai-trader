@@ -2,6 +2,10 @@
 
 Claude(Anthropic API)による売買判断をペーパートレードで検証する、cyberpunk風UIのAIトレーディングダッシュボード。
 
+<img width="1911" height="901" alt="スクリーンショット 2026-07-06 001448" src="https://github.com/user-attachments/assets/bb086d29-6ddb-4c12-a556-716c14ac8649" />
+<img width="1900" height="903" alt="スクリーンショット 2026-07-06 001501" src="https://github.com/user-attachments/assets/6ae7125b-9a0f-41e2-b958-4684092e44ad" />
+
+
 ## 構成
 
 npm workspacesによるモノレポ。
