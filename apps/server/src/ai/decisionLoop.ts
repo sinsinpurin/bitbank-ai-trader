@@ -2,7 +2,8 @@ import { getAiDecision, type MarketSnapshot } from "./claudeService";
 import { applyAiDecision } from "../trading/paperTradingEngine";
 import { prisma } from "../db/prisma";
 import { broadcast } from "../ws/relay";
-import { config, MODEL_PRICING } from "../config";
+import { config } from "../config";
+import { estimateCostJpy } from "./pricing";
 import type { AiDecision, AiUsageStats, Position, Trade } from "@bitbank-ai-trader/shared";
 
 const priceHistory: number[] = [];
@@ -10,6 +11,18 @@ const HISTORY_LIMIT = 20;
 
 let lastDecisionPrice: number | null = null;
 let lastDecisionAt = 0;
+
+// AI判断ループの有効/無効。永続化された設定はsettings/routesが起動時に反映する
+let aiDecisionEnabled = true;
+
+export function isAiDecisionEnabled(): boolean {
+  return aiDecisionEnabled;
+}
+
+export function setAiDecisionEnabled(enabled: boolean) {
+  aiDecisionEnabled = enabled;
+  console.info(`[decisionLoop] AI判断ループを${enabled ? "有効" : "無効"}にしました`);
+}
 
 export function recordPrice(price: number) {
   priceHistory.push(price);
@@ -29,17 +42,6 @@ function jstDayBoundary(): { utcBoundary: Date; dateLabel: string } {
   const utcBoundary = new Date(jstMidnight - 9 * 60 * 60 * 1000);
   const dateLabel = `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
   return { utcBoundary, dateLabel };
-}
-
-function pricingFor(model: string) {
-  return MODEL_PRICING[model] ?? MODEL_PRICING["claude-haiku-4-5"];
-}
-
-function estimateCostJpy(inputTokens: number, outputTokens: number, model: string): number {
-  const pricing = pricingFor(model);
-  const usd =
-    (inputTokens / 1_000_000) * pricing.inputPerMTok + (outputTokens / 1_000_000) * pricing.outputPerMTok;
-  return usd * config.ai.usdJpyRate;
 }
 
 async function getUsageStats(): Promise<AiUsageStats> {
@@ -91,6 +93,10 @@ export function startDecisionLoop() {
     try {
       const usage = await getUsageStats();
       broadcast({ type: "usage_stats", payload: usage });
+
+      if (!aiDecisionEnabled) {
+        return;
+      }
 
       if (usage.budgetExceeded) {
         console.info(

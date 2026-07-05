@@ -4,7 +4,7 @@ import type { AiDecisionResult } from "../ai/claudeService";
 import type { Position } from "@prisma/client";
 import type { TradeReason } from "@bitbank-ai-trader/shared";
 
-const INITIAL_JPY_BALANCE = 1_000_000;
+export const INITIAL_JPY_BALANCE = 1_000_000;
 
 async function ensureInitialBalance() {
   await prisma.virtualBalance.upsert({

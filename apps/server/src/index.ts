@@ -14,12 +14,18 @@ import {
   seedCandleHistory,
 } from "./strategy/botEngine";
 import { strategyRoutes } from "./strategy/routes";
+import { pnlRoutes } from "./pnl/routes";
+import { settingsRoutes } from "./settings/routes";
 import type { Trade } from "@bitbank-ai-trader/shared";
 
 async function main() {
   const app = Fastify({ logger: true });
   await app.register(fastifyWebsocket);
-  await app.register(fastifyCors, { origin: true });
+  // @fastify/corsのデフォルトはGET,HEAD,POSTのみ。PUT/DELETE(設定トグル・戦略更新/削除)も許可する
+  await app.register(fastifyCors, {
+    origin: true,
+    methods: ["GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS"],
+  });
 
   app.get("/health", async () => ({ status: "ok" }));
 
@@ -55,6 +61,8 @@ async function main() {
   });
 
   await app.register(strategyRoutes);
+  await app.register(pnlRoutes);
+  await app.register(settingsRoutes);
 
   app.register(async (instance) => {
     instance.get("/ws", { websocket: true }, (socket) => {

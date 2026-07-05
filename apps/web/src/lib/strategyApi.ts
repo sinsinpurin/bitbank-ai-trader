@@ -1,4 +1,4 @@
-import type { Strategy, StrategyGraph } from "@bitbank-ai-trader/shared";
+import type { GeneratedStrategy, Strategy, StrategyGraph } from "@bitbank-ai-trader/shared";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -37,6 +37,16 @@ export async function updateStrategy(
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
+    })
+  );
+}
+
+export async function generateStrategy(prompt: string): Promise<GeneratedStrategy> {
+  return handle(
+    await fetch(`${API_URL}/api/strategies/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt }),
     })
   );
 }

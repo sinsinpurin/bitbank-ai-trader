@@ -1,0 +1,79 @@
+"use client";
+
+import { Box, HStack, Stack, Text } from "@chakra-ui/react";
+import type { PnlReasonBreakdown, TradeReason } from "@bitbank-ai-trader/shared";
+import { formatSignedJpy, pnlColor } from "./format";
+
+const REASON_STYLE: Record<TradeReason, { label: string; color: string }> = {
+  ai_decision: { label: "AI判断", color: "#FF003C" },
+  stop_loss: { label: "自動損切り", color: "#FF8A1E" },
+  bot_strategy: { label: "BOT戦略", color: "#00E5FF" },
+};
+
+const REASON_ORDER: TradeReason[] = ["ai_decision", "bot_strategy", "stop_loss"];
+
+/** 決済理由(AI判断 / BOT戦略 / 自動損切り)ごとの実現損益内訳 */
+export function ReasonBreakdownPanel({ byReason }: { byReason: PnlReasonBreakdown[] }) {
+  if (byReason.length === 0) {
+    return (
+      <Text fontSize="sm" color="text.disabled">
+        決済済みの取引がまだありません。
+      </Text>
+    );
+  }
+
+  const rows = REASON_ORDER.map((reason) => byReason.find((b) => b.reason === reason)).filter(
+    (b): b is PnlReasonBreakdown => b !== undefined
+  );
+
+  return (
+    <Stack gap={2}>
+      {rows.map((row) => {
+        const style = REASON_STYLE[row.reason];
+        const winRate = row.count > 0 ? (row.winCount / row.count) * 100 : 0;
+        return (
+          <Box
+            key={row.reason}
+            position="relative"
+            bg="bg.surfaceRaised"
+            p={3}
+            pl={4}
+            _before={{
+              content: '""',
+              position: "absolute",
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: "4px",
+              bg: style.color,
+            }}
+          >
+            <HStack justify="space-between">
+              <Text
+                fontFamily="heading"
+                fontSize="11px"
+                fontWeight="600"
+                letterSpacing="0.14em"
+                textTransform="uppercase"
+                color={style.color}
+              >
+                {style.label}
+              </Text>
+              <Text fontFamily="mono" fontSize="sm" color={pnlColor(row.pnl)}>
+                {formatSignedJpy(row.pnl)}
+              </Text>
+            </HStack>
+            <HStack justify="space-between" mt={1}>
+              <Text fontSize="xs" color="text.secondary" fontFamily="mono">
+                決済 {row.count}回
+              </Text>
+              <Text fontSize="xs" color="text.secondary" fontFamily="mono">
+                勝率 {winRate.toFixed(0)}% ({row.winCount}勝{row.count - row.winCount}敗)
+              </Text>
+            </HStack>
+          </Box>
+        );
+      })}
+    </Stack>
+  );
+}
