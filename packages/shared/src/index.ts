@@ -145,6 +145,19 @@ export interface Strategy {
   updatedAt: number;
 }
 
+/** POST /api/strategies/generate のレスポンス(AIによる戦略グラフの自動生成結果) */
+export interface GeneratedStrategy {
+  name: string;
+  description: string;
+  graph: StrategyGraph;
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+    model: string;
+    estimatedCostJpy: number;
+  };
+}
+
 /** Bot戦略が発火したシグナル。executed=falseはリスク制約等で発注を見送ったことを示す */
 export interface BotSignal {
   id: string;
@@ -156,6 +169,113 @@ export interface BotSignal {
   triggeredAt: number;
   executed: boolean;
   note: string;
+}
+
+// ---------------------------------------------------------------------------
+// アプリ設定・AI使用量
+// ---------------------------------------------------------------------------
+
+/** ランタイムで変更できるアプリ設定 */
+export interface AppSettings {
+  /** AI売買判断ループ(Claude定期呼び出し)を有効にするか */
+  aiDecisionEnabled: boolean;
+}
+
+/** JST日別のAIトークン使用量(売買判断+戦略生成の合算) */
+export interface AiUsageDay {
+  date: string; // "YYYY-MM-DD" (JST基準)
+  decisionCalls: number;
+  generationCalls: number;
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCostJpy: number;
+}
+
+/** GET /api/settings が返すAI使用量サマリ */
+export interface AiUsageSummary {
+  decisionModel: string;
+  strategyModel: string;
+  dailyBudgetJpy: number;
+  /** 本日(JST)の売買判断ループ分の推定コスト。日次予算の判定対象はこちらのみ */
+  todayDecisionCostJpy: number;
+  budgetExceeded: boolean;
+  /** 直近30日(JST)の日別使用量。新しい日が先頭 */
+  days: AiUsageDay[];
+  /** daysに含まれる期間の合計 */
+  totals: {
+    decisionCalls: number;
+    generationCalls: number;
+    inputTokens: number;
+    outputTokens: number;
+    estimatedCostJpy: number;
+  };
+}
+
+export interface SettingsResponse {
+  settings: AppSettings;
+  usage: AiUsageSummary;
+}
+
+// ---------------------------------------------------------------------------
+// 損益ダッシュボード
+// ---------------------------------------------------------------------------
+
+/** 累積実現損益カーブの1点(timeはUNIX秒) */
+export interface PnlCurvePoint {
+  time: number;
+  value: number;
+}
+
+/** JST日次の実現損益 */
+export interface PnlDailyPoint {
+  date: string; // "YYYY-MM-DD" (JST基準)
+  pnl: number;
+  tradeCount: number;
+}
+
+/** 決済理由(≒発注経路)ごとの実現損益内訳 */
+export interface PnlReasonBreakdown {
+  reason: TradeReason;
+  pnl: number;
+  count: number;
+  winCount: number;
+}
+
+/** 決済済みポジション+決済理由 */
+export interface ClosedPositionRecord extends Position {
+  closeReason: TradeReason | null;
+}
+
+/** GET /api/pnl が返す損益サマリ */
+export interface PnlSummary {
+  pair: Pair;
+  currentPrice: number | null;
+  /** 決済済みポジションの損益合計 */
+  realizedPnl: number;
+  /** 未決済ポジションの現在値評価損益(currentPrice不明時は0) */
+  unrealizedPnl: number;
+  totalPnl: number;
+  winCount: number;
+  lossCount: number;
+  /** 勝率0-1。決済0件ならnull */
+  winRate: number | null;
+  avgWin: number | null;
+  avgLoss: number | null;
+  /** 総利益/総損失。損失0なら null */
+  profitFactor: number | null;
+  /** 累積実現損益カーブ上の最大ドローダウン(正の値) */
+  maxDrawdown: number;
+  balanceJpy: number;
+  balanceBtc: number;
+  /** JPY残高 + BTC残高の現在値評価 */
+  equityJpy: number;
+  initialBalanceJpy: number;
+  equityCurve: PnlCurvePoint[];
+  dailyPnl: PnlDailyPoint[];
+  byReason: PnlReasonBreakdown[];
+  openPositions: Position[];
+  /** 直近の決済済みポジション(新しい順) */
+  closedPositions: ClosedPositionRecord[];
 }
 
 /** WebSocketでサーバーからフロントへ配信するメッセージの共通形式 */

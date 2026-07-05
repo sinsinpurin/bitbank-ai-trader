@@ -61,6 +61,24 @@ model Strategy {
   updatedAt   DateTime @updatedAt
 }
 
+// アプリ設定のキーバリューストア(例: aiDecisionEnabled = "true")
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+// AI戦略生成(/api/strategies/generate)のトークン使用ログ
+model AiGenerationLog {
+  id           String   @id @default(cuid())
+  prompt       String
+  name         String   @default("")
+  model        String
+  inputTokens  Int
+  outputTokens Int
+  createdAt    DateTime @default(now())
+}
+
 model VirtualBalance {
   id        String   @id @default(cuid())
   currency  String   @unique // "jpy" | "btc" など

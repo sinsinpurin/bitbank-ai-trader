@@ -4,6 +4,8 @@ import { parseGraph, type Strategy, type StrategyGraph } from "@bitbank-ai-trade
 import { prisma } from "../db/prisma";
 import { reloadActiveStrategies } from "./botEngine";
 import { broadcast } from "../ws/relay";
+import { generateStrategyFromPrompt } from "../ai/strategyGenerator";
+import { config } from "../config";
 
 function toStrategyDto(row: PrismaStrategy): Strategy {
   return {
@@ -35,6 +37,34 @@ export async function strategyRoutes(app: FastifyInstance) {
     const rows = await prisma.strategy.findMany({ orderBy: { updatedAt: "desc" } });
     return rows.map(toStrategyDto);
   });
+
+  // 自由文の要望からAIで戦略グラフを生成する(保存はしない — エディタで確認・調整後にSave)
+  app.post<{ Body: { prompt?: string } }>(
+    "/api/strategies/generate",
+    async (request, reply) => {
+      const prompt = request.body?.prompt?.trim();
+      if (!prompt) {
+        return reply.status(400).send({ error: "prompt は必須です" });
+      }
+      if (prompt.length > 1000) {
+        return reply.status(400).send({ error: "prompt は1000文字以内で入力してください" });
+      }
+      if (!config.anthropic.apiKey) {
+        return reply
+          .status(503)
+          .send({ error: "ANTHROPIC_API_KEY が設定されていないため、AI生成は利用できません" });
+      }
+
+      try {
+        return await generateStrategyFromPrompt(prompt);
+      } catch (err) {
+        request.log.error(err, "戦略グラフのAI生成に失敗しました");
+        return reply.status(502).send({
+          error: err instanceof Error ? err.message : "戦略グラフの生成に失敗しました",
+        });
+      }
+    }
+  );
 
   app.post<{ Body: StrategyBody }>("/api/strategies", async (request, reply) => {
     const { name, description, graph } = request.body ?? {};

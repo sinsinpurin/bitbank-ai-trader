@@ -14,6 +14,7 @@ function requireEnv(name: string, fallback?: string): string {
 export const MODEL_PRICING: Record<string, { inputPerMTok: number; outputPerMTok: number }> = {
   "claude-haiku-4-5": { inputPerMTok: 1.0, outputPerMTok: 5.0 },
   "claude-sonnet-5": { inputPerMTok: 3.0, outputPerMTok: 15.0 },
+  "claude-opus-4-8": { inputPerMTok: 5.0, outputPerMTok: 25.0 },
 };
 
 const DEFAULT_AI_MODEL = "claude-haiku-4-5";
@@ -40,6 +41,10 @@ export const config = {
   },
   ai: {
     model: resolveAiModel(),
+    // 戦略グラフの自動生成用モデル。ユーザー操作起点の単発呼び出しなので、
+    // 常駐の売買判断ループより高性能なモデルをデフォルトにする
+    strategyModel: process.env.AI_STRATEGY_MODEL ?? "claude-opus-4-8",
+    strategyMaxTokens: Number(process.env.AI_STRATEGY_MAX_TOKENS ?? 4096),
     maxTokens: Number(process.env.AI_MAX_TOKENS ?? 512),
     // ループが状態をチェックする間隔(Claude実呼び出しとは別、軽量なので短くてよい)
     pollIntervalMs: Number(process.env.AI_POLL_INTERVAL_MS ?? 15_000),

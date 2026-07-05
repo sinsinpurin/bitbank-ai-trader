@@ -21,6 +21,7 @@ import "@xyflow/react/dist/style.css";
 
 import {
   evaluateGraph,
+  type GeneratedStrategy,
   type NodeLiveValue,
   type Strategy,
   type StrategyGraph,
@@ -34,6 +35,7 @@ import { NodePalette, DND_MIME } from "@/components/strategy/NodePalette";
 import { StrategyList } from "@/components/strategy/StrategyList";
 import { BotSignalFeed } from "@/components/strategy/BotSignalFeed";
 import { TemplateGallery } from "@/components/strategy/TemplateGallery";
+import { AiGeneratePanel } from "@/components/strategy/AiGeneratePanel";
 import { StrategyPreview } from "@/components/strategy/StrategyPreview";
 import { describeGraph } from "@/components/strategy/describeGraph";
 import { STRATEGY_TEMPLATES, type StrategyTemplate } from "@/components/strategy/strategyTemplates";
@@ -297,6 +299,27 @@ function StrategyEditor() {
     [nodes.length, setNodes, setEdges, notify, fitView]
   );
 
+  const handleGenerated = useCallback(
+    (result: GeneratedStrategy) => {
+      if (
+        nodes.length > 0 &&
+        !window.confirm(`キャンバスをAI生成の戦略「${result.name}」で置き換えます。よろしいですか?`)
+      ) {
+        return;
+      }
+      const { nodes: n, edges: e } = fromGraph(result.graph);
+      setNodes(n);
+      setEdges(e);
+      setSelectedId(null);
+      setName(result.name);
+      notify(
+        `AIが戦略「${result.name}」を生成しました(推定コスト ¥${result.usage.estimatedCostJpy.toFixed(2)})。内容を確認してSaveしてください`
+      );
+      window.requestAnimationFrame(() => fitView({ padding: 0.15 }));
+    },
+    [nodes.length, setNodes, setEdges, notify, fitView]
+  );
+
   const handleDelete = useCallback(
     async (strategy: Strategy) => {
       if (!window.confirm(`戦略 "${strategy.name}" を削除しますか?`)) return;
@@ -438,12 +461,15 @@ function StrategyEditor() {
 
       <GridItem>
         <Stack gap={6}>
-          <CyberPanel title="Strategy Templates" code="03 / LIB" accent="cyan" collapsible>
+          <CyberPanel title="AI Strategy Gen" code="03 / GEN" accent="red">
+            <AiGeneratePanel onGenerated={handleGenerated} />
+          </CyberPanel>
+          <CyberPanel title="Strategy Templates" code="04 / LIB" accent="cyan" collapsible>
             <Box maxH="380px" overflowY="auto" pr={1}>
               <TemplateGallery onLoad={handleLoadTemplate} />
             </Box>
           </CyberPanel>
-          <CyberPanel title="Deployed Strategies" code="04 / OPS" accent="red" collapsible>
+          <CyberPanel title="Deployed Strategies" code="05 / OPS" accent="red" collapsible>
             <Box maxH="360px" overflowY="auto" pr={1}>
               <StrategyList
                 strategies={strategies}
@@ -454,7 +480,7 @@ function StrategyEditor() {
               />
             </Box>
           </CyberPanel>
-          <CyberPanel title="Bot Signal Feed" code="05 / SIG" accent="cyan" collapsible>
+          <CyberPanel title="Bot Signal Feed" code="06 / SIG" accent="cyan" collapsible>
             <BotSignalFeed signals={botSignals} />
           </CyberPanel>
         </Stack>
