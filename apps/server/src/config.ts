@@ -78,6 +78,11 @@ export const config = {
     // 円換算用の概算レート(正確な現在レートではなく見積もり用の概算値)
     usdJpyRate: Number(process.env.AI_USD_JPY_RATE ?? 155),
   },
+  candles: {
+    // 起動時にbitbank公開RESTから取得する1分足の日数(1〜7)。
+    // チャート表示と指標のウォームアップを起動直後から使えるようにする
+    seedDays: Math.min(7, Math.max(1, Number(process.env.CANDLE_SEED_DAYS ?? 3))),
+  },
   bot: {
     // 同一戦略が連続発火するのを防ぐ最短間隔
     cooldownMs: Number(process.env.BOT_COOLDOWN_MS ?? 60_000),

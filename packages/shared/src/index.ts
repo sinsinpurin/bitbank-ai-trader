@@ -341,6 +341,38 @@ export interface PnlSummary {
   closedPositions: ClosedPositionRecord[];
 }
 
+// ---------------------------------------------------------------------------
+// カスタムシグナルモニター(ダッシュボードの監視条件)
+// ---------------------------------------------------------------------------
+
+/** シグナル条件のオペランド。constantは固定値、それ以外は1分足終値ベースの指標 */
+export interface SignalOperand {
+  type: "price" | "sma" | "ema" | "rsi" | "constant";
+  /** sma/ema/rsi の期間 */
+  period?: number;
+  /** constant の値 */
+  value?: number;
+}
+
+export type SignalOp = CompareOp | CrossOp;
+
+/** 監視条件: left op right(例: rsi(14) lt 30) */
+export interface SignalWatchConfig {
+  left: SignalOperand;
+  op: SignalOp;
+  right: SignalOperand;
+}
+
+export interface SignalWatch {
+  id: string;
+  /** 表示名(空なら条件から自動生成) */
+  name: string;
+  pair: Pair;
+  config: SignalWatchConfig;
+  createdAt: number;
+  updatedAt: number;
+}
+
 /** WebSocketでサーバーからフロントへ配信するメッセージの共通形式 */
 export type ServerEvent =
   | { type: "ticker"; payload: Ticker }

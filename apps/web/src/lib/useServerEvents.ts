@@ -66,18 +66,28 @@ export function useServerEvents(seedCandles: CandlestickData[], candlePair?: str
     setCandles([]);
     fetch(`${API_URL}/api/candles?pair=${candlePair}`)
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: { times: number[]; closes: number[] } | null) => {
-        if (cancelled || !data || !Array.isArray(data.closes)) return;
-        // 終値のみの履歴なのでO=H=L=Cのフラットな足としてプレフィルする
-        const prefilled: CandlestickData[] = data.times.map((time, i) => ({
-          time: time as UTCTimestamp,
-          open: data.closes[i],
-          high: data.closes[i],
-          low: data.closes[i],
-          close: data.closes[i],
-        }));
-        setCandles((prev) => (prev.length === 0 ? prefilled : prev));
-      })
+      .then(
+        (
+          data: {
+            times: number[];
+            opens?: number[];
+            highs?: number[];
+            lows?: number[];
+            closes: number[];
+          } | null
+        ) => {
+          if (cancelled || !data || !Array.isArray(data.closes)) return;
+          // サーバーがOHLCを返す場合は本物のローソク足でプレフィルする
+          const prefilled: CandlestickData[] = data.times.map((time, i) => ({
+            time: time as UTCTimestamp,
+            open: data.opens?.[i] ?? data.closes[i],
+            high: data.highs?.[i] ?? data.closes[i],
+            low: data.lows?.[i] ?? data.closes[i],
+            close: data.closes[i],
+          }));
+          setCandles((prev) => (prev.length === 0 ? prefilled : prev));
+        }
+      )
       .catch(() => {});
     return () => {
       cancelled = true;

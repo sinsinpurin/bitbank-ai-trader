@@ -21,10 +21,14 @@ import {
 
 interface CandleBucket {
   time: number; // 分単位のエポック秒
+  open: number;
+  high: number;
+  low: number;
   close: number;
 }
 
-const HISTORY_LIMIT = 500;
+// 保持する1分足の本数(シード日数分+バッファ)
+const HISTORY_LIMIT = config.candles.seedDays * 1440 + 120;
 
 interface PairCandleState {
   // 確定済みの1分足終値。末尾に「形成中の現在値」を加えた配列で評価する
@@ -79,23 +83,41 @@ function jstDateLabel(offsetDays: number): string {
 }
 
 /**
- * bitbank公開REST(1分足)で指定ペアの終値履歴を初期化する。
- * サーバー再起動直後でもSMA/RSI等のインジケーターが即座に計算できるようにするため。
+ * bitbank公開REST(1分足)で指定ペアのOHLC履歴を初期化する。
+ * 起動直後からチャート表示・SMA/RSI等の指標計算・戦略評価を使えるようにするため、
+ * CANDLE_SEED_DAYS日分(既定3日)を日付ごとに取得する。
  * 取得失敗時は空のまま起動し、ティッカーから履歴を積み上げる。
  */
 export async function seedCandleHistory(pair: string) {
   try {
     const candles: CandleBucket[] = [];
-    // 日本時間の昨日+今日で最大2日分を取得し、直近HISTORY_LIMIT本へ切り詰める
-    for (const offset of [-1, 0]) {
-      const date = jstDateLabel(offset);
-      const res = await fetch(`https://public.bitbank.cc/${pair}/candlestick/1min/${date}`);
-      if (!res.ok) continue;
-      const json = (await res.json()) as CandlestickResponse;
-      if (json.success !== 1) continue;
+    // 今日(部分)+過去seedDays日分を取得し、直近HISTORY_LIMIT本へ切り詰める
+    const offsets = Array.from({ length: config.candles.seedDays + 1 }, (_, i) => i - config.candles.seedDays);
+    const responses = await Promise.all(
+      offsets.map(async (offset) => {
+        try {
+          const date = jstDateLabel(offset);
+          const res = await fetch(`https://public.bitbank.cc/${pair}/candlestick/1min/${date}`);
+          if (!res.ok) return null;
+          const json = (await res.json()) as CandlestickResponse;
+          return json.success === 1 ? json : null;
+        } catch {
+          return null;
+        }
+      })
+    );
+
+    for (const json of responses) {
+      if (!json) continue;
       for (const entry of json.data.candlestick) {
-        for (const [, , , close, , ts] of entry.ohlcv) {
-          candles.push({ time: Math.floor(ts / 1000 / 60) * 60, close: Number(close) });
+        for (const [open, high, low, close, , ts] of entry.ohlcv) {
+          candles.push({
+            time: Math.floor(ts / 1000 / 60) * 60,
+            open: Number(open),
+            high: Number(high),
+            low: Number(low),
+            close: Number(close),
+          });
         }
       }
     }
@@ -111,7 +133,9 @@ export async function seedCandleHistory(pair: string) {
     const state = stateFor(pair);
     state.closed = candles.slice(-HISTORY_LIMIT);
     state.forming = null;
-    console.info(`[botEngine] ${pair} の1分足履歴を${state.closed.length}本シードしました`);
+    console.info(
+      `[botEngine] ${pair} の1分足履歴を${state.closed.length}本シードしました(${config.candles.seedDays}日分設定)`
+    );
   } catch (err) {
     console.warn(`[botEngine] ${pair} のローソク足履歴のシードに失敗しました`, err);
   }
@@ -167,8 +191,15 @@ function recordCandle(state: PairCandleState, price: number, timestampMs: number
       while (state.closed.length > 0 && state.closed[state.closed.length - 1].time >= bucketTime) {
         state.closed.pop();
       }
+      state.forming = { time: bucketTime, open: price, high: price, low: price, close: price };
+      return;
     }
-    state.forming = { time: bucketTime, close: price };
+    state.forming = {
+      ...state.forming,
+      high: Math.max(state.forming.high, price),
+      low: Math.min(state.forming.low, price),
+      close: price,
+    };
     return;
   }
 
@@ -177,7 +208,7 @@ function recordCandle(state: PairCandleState, price: number, timestampMs: number
   if (state.closed.length > HISTORY_LIMIT) {
     state.closed.shift();
   }
-  state.forming = { time: bucketTime, close: price };
+  state.forming = { time: bucketTime, open: price, high: price, low: price, close: price };
 }
 
 function closeSeries(state: PairCandleState): number[] {
@@ -230,6 +261,23 @@ async function fireSignal(
     `[botEngine] ${strategy.name} (${pair}): ${action} シグナル (price=${price}, executed=${executed})`
   );
   broadcast({ type: "bot_signal", payload: signal });
+
+  // リロード後もフィードで参照できるよう発火履歴を永続化する(失敗しても取引は続行)
+  await prisma.botSignalLog
+    .create({
+      data: {
+        id: signal.id,
+        strategyId: signal.strategyId,
+        strategyName: signal.strategyName,
+        pair: signal.pair,
+        action: signal.action,
+        price: signal.price,
+        triggeredAt: new Date(signal.triggeredAt),
+        executed: signal.executed,
+        note: signal.note,
+      },
+    })
+    .catch((err) => console.error("[botEngine] シグナル履歴の保存に失敗しました", err));
 
   if (result.trade) {
     broadcast({ type: "trade", payload: toTradeEvent(result.trade) });

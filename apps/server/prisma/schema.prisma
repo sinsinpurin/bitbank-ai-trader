@@ -100,6 +100,30 @@ model AiGenerationLog {
   createdAt    DateTime @default(now())
 }
 
+// ダッシュボードのカスタムシグナルモニターの監視条件
+model SignalWatch {
+  id        String   @id @default(cuid())
+  name      String   @default("")
+  pair      String
+  config    String // SignalWatchConfig(left/op/right)のJSON文字列
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Bot戦略シグナルの発火履歴(WS配信とは別に永続化し、リロード後も参照できるようにする)
+model BotSignalLog {
+  id           String   @id
+  strategyId   String
+  strategyName String
+  pair         String
+  action       String // "buy" | "sell"
+  price        Float
+  triggeredAt  DateTime
+  executed     Boolean
+  note         String
+}
+
 model VirtualBalance {
   id        String   @id @default(cuid())
   currency  String   @unique // "jpy" | "btc" など

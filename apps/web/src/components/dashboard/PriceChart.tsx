@@ -6,14 +6,19 @@ import {
   CandlestickSeries,
   ColorType,
   createChart,
+  createSeriesMarkers,
   type CandlestickData,
+  type SeriesMarker,
+  type Time,
 } from "lightweight-charts";
 
 interface PriceChartProps {
   data: CandlestickData[];
+  /** 約定・シグナルの発生位置に表示するマーカー(時刻昇順) */
+  markers?: SeriesMarker<Time>[];
 }
 
-export function PriceChart({ data }: PriceChartProps) {
+export function PriceChart({ data, markers }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -49,6 +54,9 @@ export function PriceChart({ data }: PriceChartProps) {
     });
 
     series.setData(data);
+    if (markers && markers.length > 0) {
+      createSeriesMarkers(series, markers);
+    }
     chart.timeScale().fitContent();
 
     const handleResize = () => {
@@ -60,7 +68,7 @@ export function PriceChart({ data }: PriceChartProps) {
       window.removeEventListener("resize", handleResize);
       chart.remove();
     };
-  }, [data]);
+  }, [data, markers]);
 
   return <Box ref={containerRef} width="100%" height="360px" />;
 }

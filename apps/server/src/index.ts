@@ -20,6 +20,7 @@ import {
 import { strategyRoutes } from "./strategy/routes";
 import { pnlRoutes } from "./pnl/routes";
 import { settingsRoutes } from "./settings/routes";
+import { signalRoutes } from "./signals/routes";
 import type { Trade } from "@bitbank-ai-trader/shared";
 
 async function main() {
@@ -70,6 +71,9 @@ async function main() {
     return {
       pair,
       times: candles.map((c) => c.time),
+      opens: candles.map((c) => c.open),
+      highs: candles.map((c) => c.high),
+      lows: candles.map((c) => c.low),
       closes: candles.map((c) => c.close),
     };
   });
@@ -77,6 +81,7 @@ async function main() {
   await app.register(strategyRoutes);
   await app.register(pnlRoutes);
   await app.register(settingsRoutes);
+  await app.register(signalRoutes);
 
   app.register(async (instance) => {
     instance.get("/ws", { websocket: true }, (socket) => {
