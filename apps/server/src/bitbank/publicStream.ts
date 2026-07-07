@@ -14,18 +14,22 @@ interface RawTickerMessage {
 }
 
 /**
- * bitbank Public Stream(socket.io)に接続し、指定ペアのtickerを購読する。
+ * bitbank Public Stream(socket.io)に接続し、複数ペアのtickerを1つのソケットで購読する。
  * 参照: https://github.com/bitbankinc/bitbank-api-docs/blob/master/public-stream_JP.md
  */
-export function subscribeTicker(
-  pair: string,
+export function subscribeTickers(
+  pairs: string[],
   onTicker: (ticker: Ticker) => void
 ): Socket {
   const socket = io(STREAM_URL, { transports: ["websocket"] });
-  const channel = `ticker_${pair}`;
+  // room_name("ticker_btc_jpy")→ペアの逆引き
+  const pairByChannel = new Map(pairs.map((pair) => [`ticker_${pair}`, pair]));
 
   socket.on("connect", () => {
-    socket.emit("join-room", channel);
+    for (const channel of pairByChannel.keys()) {
+      socket.emit("join-room", channel);
+    }
+    console.info(`[publicStream] ${pairs.join(", ")} のtickerを購読しました`);
   });
 
   socket.on("message", (raw: unknown) => {
@@ -36,7 +40,8 @@ export function subscribeTicker(
         room_name: string;
         message: { data: RawTickerMessage };
       };
-      if (parsed.room_name !== channel) return;
+      const pair = pairByChannel.get(parsed.room_name);
+      if (!pair) return;
 
       const data = parsed.message.data;
       onTicker({

@@ -3,7 +3,7 @@ import fastifyWebsocket from "@fastify/websocket";
 import fastifyCors from "@fastify/cors";
 import { config } from "./config";
 import { prisma } from "./db/prisma";
-import { subscribeTicker } from "./bitbank/publicStream";
+import { subscribeTickers } from "./bitbank/publicStream";
 import { registerClient, broadcast } from "./ws/relay";
 import { recordPrice, startDecisionLoop } from "./ai/decisionLoop";
 import { checkStopLosses } from "./trading/riskManager";
@@ -50,11 +50,21 @@ async function main() {
     );
   });
 
+  // 取引対象ペアの一覧(Webのペアセレクタ用)
+  app.get("/api/pairs", async () => ({
+    pairs: config.targetPairs,
+    primaryPair: config.targetPair,
+  }));
+
   // Bot/エディタ共用の1分足終値履歴(エディタのライブ評価に使う)
-  app.get("/api/candles", async () => {
-    const candles = getCandleHistory();
+  app.get<{ Querystring: { pair?: string } }>("/api/candles", async (request, reply) => {
+    const pair = request.query.pair ?? config.targetPair;
+    if (!config.targetPairs.includes(pair)) {
+      return reply.status(400).send({ error: `未対応のペアです: ${pair}` });
+    }
+    const candles = getCandleHistory(pair);
     return {
-      pair: config.targetPair,
+      pair,
       times: candles.map((c) => c.time),
       closes: candles.map((c) => c.close),
     };
@@ -71,10 +81,13 @@ async function main() {
   });
 
   await reloadActiveStrategies();
-  await seedCandleHistory(config.targetPair);
+  await Promise.all(config.targetPairs.map((pair) => seedCandleHistory(pair)));
 
-  subscribeTicker(config.targetPair, (ticker) => {
-    recordPrice(ticker.last);
+  subscribeTickers(config.targetPairs, (ticker) => {
+    // AI売買判断ループはメインペアのみ対象(ペア数分のClaude呼び出しコスト増を防ぐ)
+    if (ticker.pair === config.targetPair) {
+      recordPrice(ticker.last);
+    }
     broadcast({ type: "ticker", payload: ticker });
     checkStopLosses(ticker.pair, ticker.last).catch((err) =>
       app.log.error(err, "損切りチェックに失敗しました")

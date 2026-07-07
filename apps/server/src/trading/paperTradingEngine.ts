@@ -6,16 +6,21 @@ import type { TradeReason } from "@bitbank-ai-trader/shared";
 
 export const INITIAL_JPY_BALANCE = 1_000_000;
 
-async function ensureInitialBalance() {
+/** ペアから資産通貨(base currency)を導出する。例: "eth_jpy" → "eth" */
+export function assetCurrencyOf(pair: string): string {
+  return pair.split("_")[0];
+}
+
+async function ensureInitialBalance(pair: string) {
   await prisma.virtualBalance.upsert({
     where: { currency: "jpy" },
     update: {},
     create: { currency: "jpy", amount: INITIAL_JPY_BALANCE },
   });
   await prisma.virtualBalance.upsert({
-    where: { currency: "btc" },
+    where: { currency: assetCurrencyOf(pair) },
     update: {},
-    create: { currency: "btc", amount: 0 },
+    create: { currency: assetCurrencyOf(pair), amount: 0 },
   });
 }
 
@@ -37,7 +42,7 @@ export async function closePosition(
       data: { amount: { increment: proceeds } },
     }),
     prisma.virtualBalance.update({
-      where: { currency: "btc" },
+      where: { currency: assetCurrencyOf(position.pair) },
       data: { amount: { decrement: position.amount } },
     }),
     prisma.trade.create({
@@ -94,7 +99,7 @@ export async function openBuyPosition(
   reason: TradeReason,
   aiDecisionLogId?: string
 ) {
-  await ensureInitialBalance();
+  await ensureInitialBalance(pair);
 
   const openPositionCount = await prisma.position.count({
     where: { pair, side: "buy", closedAt: null },
@@ -121,7 +126,7 @@ export async function openBuyPosition(
       data: { amount: { decrement: cost } },
     }),
     prisma.virtualBalance.update({
-      where: { currency: "btc" },
+      where: { currency: assetCurrencyOf(pair) },
       data: { amount: { increment: amount } },
     }),
     prisma.position.create({

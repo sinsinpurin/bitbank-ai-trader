@@ -15,15 +15,17 @@ interface CandlesResponse {
  * サーバー(Botエンジン)が保持する1分足終値履歴をポーリングで取得する。
  * エディタ上のノードを「Botが実際に見ているのと同じデータ」で評価するために使う。
  */
-export function useLiveCandles(): number[] {
+export function useLiveCandles(pair?: string): number[] {
   const [closes, setCloses] = useState<number[]>([]);
 
   useEffect(() => {
     let cancelled = false;
+    setCloses([]);
 
     const load = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/candles`);
+        const query = pair ? `?pair=${pair}` : "";
+        const res = await fetch(`${API_URL}/api/candles${query}`);
         if (!res.ok) return;
         const data = (await res.json()) as CandlesResponse;
         if (!cancelled && Array.isArray(data.closes)) {
@@ -40,7 +42,7 @@ export function useLiveCandles(): number[] {
       cancelled = true;
       clearInterval(timer);
     };
-  }, []);
+  }, [pair]);
 
   return closes;
 }

@@ -138,6 +138,8 @@ export interface StrategyGraph {
 export interface Strategy {
   id: string;
   name: string;
+  /** 対象ペア(例: "btc_jpy")。このペアの1分足でグラフが評価される */
+  pair: Pair;
   description: string;
   graph: StrategyGraph;
   isActive: boolean;
@@ -246,10 +248,17 @@ export interface ClosedPositionRecord extends Position {
   closeReason: TradeReason | null;
 }
 
-/** GET /api/pnl が返す損益サマリ */
+/** GET /api/pairs が返す取引対象ペア情報 */
+export interface PairsInfo {
+  pairs: Pair[];
+  /** メインペア。AI売買判断ループの対象 */
+  primaryPair: Pair;
+}
+
+/** GET /api/pnl が返す損益サマリ(全ペア合算) */
 export interface PnlSummary {
-  pair: Pair;
-  currentPrice: number | null;
+  /** ペアごとの最新価格(1分足終値ベース)。履歴が無いペアは含まれない */
+  currentPrices: Record<Pair, number>;
   /** 決済済みポジションの損益合計 */
   realizedPnl: number;
   /** 未決済ポジションの現在値評価損益(currentPrice不明時は0) */
@@ -266,7 +275,8 @@ export interface PnlSummary {
   /** 累積実現損益カーブ上の最大ドローダウン(正の値) */
   maxDrawdown: number;
   balanceJpy: number;
-  balanceBtc: number;
+  /** JPY以外の仮想残高(通貨コード→数量)。例: { btc: 0.003, eth: 0.1 } */
+  assetBalances: Record<string, number>;
   /** JPY残高 + BTC残高の現在値評価 */
   equityJpy: number;
   initialBalanceJpy: number;

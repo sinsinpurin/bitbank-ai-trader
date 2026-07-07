@@ -16,7 +16,7 @@ const REASON_LABEL: Record<TradeReason, string> = {
   bot_strategy: "BOT戦略",
 };
 
-const COLUMNS = "minmax(90px, 1fr) minmax(70px, 0.8fr) repeat(2, minmax(100px, 1fr)) minmax(90px, 0.9fr) minmax(70px, 0.8fr) minmax(100px, 1fr)";
+const COLUMNS = "minmax(90px, 1fr) minmax(80px, 0.8fr) minmax(70px, 0.8fr) repeat(2, minmax(100px, 1fr)) minmax(90px, 0.9fr) minmax(70px, 0.8fr) minmax(100px, 1fr)";
 
 function HeaderCell({ children, align = "left" }: { children: string; align?: "left" | "right" }) {
   return (
@@ -46,9 +46,10 @@ export function ClosedPositionsTable({ positions }: { positions: ClosedPositionR
 
   return (
     <Box overflowX="auto">
-      <Box minWidth="720px">
+      <Box minWidth="800px">
         <Grid templateColumns={COLUMNS} gap={3} px={3} pb={2}>
           <HeaderCell>決済日時</HeaderCell>
+          <HeaderCell>ペア</HeaderCell>
           <HeaderCell>保有時間</HeaderCell>
           <HeaderCell align="right">建値</HeaderCell>
           <HeaderCell align="right">決済値</HeaderCell>
@@ -74,6 +75,9 @@ export function ClosedPositionsTable({ positions }: { positions: ClosedPositionR
               >
                 <Text fontFamily="mono" fontSize="xs" color="text.secondary">
                   {position.closedAt !== null ? formatDateTime(position.closedAt) : "--"}
+                </Text>
+                <Text fontFamily="mono" fontSize="xs" color="signal.cyan">
+                  {position.pair.toUpperCase()}
                 </Text>
                 <Text fontFamily="mono" fontSize="xs" color="text.secondary">
                   {position.closedAt !== null

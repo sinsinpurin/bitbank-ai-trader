@@ -63,6 +63,9 @@ export function TradeHistoryPanel({ trades }: { trades: Trade[] }) {
                 >
                   {style.label}
                 </Text>
+                <Text fontFamily="mono" fontSize="10px" color="text.secondary">
+                  {trade.pair.toUpperCase()}
+                </Text>
                 {trade.reason !== "ai_decision" && (
                   <Text
                     fontFamily="heading"

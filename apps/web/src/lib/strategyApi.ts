@@ -16,6 +16,7 @@ export async function fetchStrategies(): Promise<Strategy[]> {
 
 export async function createStrategy(input: {
   name: string;
+  pair?: string;
   description?: string;
   graph: StrategyGraph;
 }): Promise<Strategy> {
@@ -30,7 +31,7 @@ export async function createStrategy(input: {
 
 export async function updateStrategy(
   id: string,
-  input: Partial<{ name: string; description: string; graph: StrategyGraph; isActive: boolean }>
+  input: Partial<{ name: string; pair: string; description: string; graph: StrategyGraph; isActive: boolean }>
 ): Promise<Strategy> {
   return handle(
     await fetch(`${API_URL}/api/strategies/${id}`, {
@@ -41,12 +42,12 @@ export async function updateStrategy(
   );
 }
 
-export async function generateStrategy(prompt: string): Promise<GeneratedStrategy> {
+export async function generateStrategy(prompt: string, pair?: string): Promise<GeneratedStrategy> {
   return handle(
     await fetch(`${API_URL}/api/strategies/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({ prompt, pair }),
     })
   );
 }

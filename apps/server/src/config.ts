@@ -29,9 +29,28 @@ function resolveAiModel(): string {
   return model;
 }
 
+/** 取引対象ペア。TARGET_PAIRS(カンマ区切り)優先、無ければ旧TARGET_PAIR、既定はbtc_jpy */
+function resolveTargetPairs(): string[] {
+  const raw = process.env.TARGET_PAIRS ?? process.env.TARGET_PAIR ?? "btc_jpy";
+  const pairs = [...new Set(raw.split(",").map((p) => p.trim().toLowerCase()).filter(Boolean))];
+  for (const pair of pairs) {
+    if (!/^[a-z0-9]+_jpy$/.test(pair)) {
+      console.warn(
+        `[config] ペア "${pair}" はJPY建てではありません。ペーパートレードの損益計算はJPY建てペアのみ対応しています`
+      );
+    }
+  }
+  return pairs.length > 0 ? pairs : ["btc_jpy"];
+}
+
+const targetPairs = resolveTargetPairs();
+
 export const config = {
   port: Number(process.env.PORT ?? 4000),
-  targetPair: process.env.TARGET_PAIR ?? "btc_jpy",
+  /** 全取引対象ペア */
+  targetPairs,
+  /** メインペア(先頭)。AI売買判断ループはこのペアのみを対象にする */
+  targetPair: targetPairs[0],
   bitbank: {
     apiKey: process.env.BITBANK_API_KEY ?? "",
     apiSecret: process.env.BITBANK_API_SECRET ?? "",

@@ -42,7 +42,12 @@ function applyTickerToCandles(
   return next;
 }
 
-export function useServerEvents(seedCandles: CandlestickData[]) {
+/**
+ * サーバーWSのイベントを購読する。
+ * candlePairを指定すると、そのペアのローソク足のみを蓄積し、
+ * 切り替え時にはサーバーの1分足履歴(/api/candles)でプレフィルする。
+ */
+export function useServerEvents(seedCandles: CandlestickData[], candlePair?: string) {
   const [connected, setConnected] = useState(false);
   const [candles, setCandles] = useState<CandlestickData[]>(seedCandles);
   const [aiDecisions, setAiDecisions] = useState<AiDecision[]>([]);
@@ -51,6 +56,33 @@ export function useServerEvents(seedCandles: CandlestickData[]) {
   const [usage, setUsage] = useState<AiUsageStats | null>(null);
   const [botSignals, setBotSignals] = useState<BotSignal[]>([]);
   const seedRef = useRef(seedCandles);
+  const candlePairRef = useRef(candlePair);
+  candlePairRef.current = candlePair;
+
+  // ペア切り替え時: 履歴をリセットし、サーバーの1分足終値でプレフィルする
+  useEffect(() => {
+    if (!candlePair) return;
+    let cancelled = false;
+    setCandles([]);
+    fetch(`${API_URL}/api/candles?pair=${candlePair}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { times: number[]; closes: number[] } | null) => {
+        if (cancelled || !data || !Array.isArray(data.closes)) return;
+        // 終値のみの履歴なのでO=H=L=Cのフラットな足としてプレフィルする
+        const prefilled: CandlestickData[] = data.times.map((time, i) => ({
+          time: time as UTCTimestamp,
+          open: data.closes[i],
+          high: data.closes[i],
+          low: data.closes[i],
+          close: data.closes[i],
+        }));
+        setCandles((prev) => (prev.length === 0 ? prefilled : prev));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [candlePair]);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,6 +128,8 @@ export function useServerEvents(seedCandles: CandlestickData[]) {
 
         switch (parsed.type) {
           case "ticker":
+            // 表示対象ペア以外のtickerはローソク足へ混ぜない
+            if (candlePairRef.current && parsed.payload.pair !== candlePairRef.current) break;
             setCandles((prev) =>
               applyTickerToCandles(prev, parsed.payload.last, parsed.payload.timestamp)
             );

@@ -59,7 +59,10 @@ export function StrategyList({
               />
             </HStack>
             <Text fontSize="10px" fontFamily="mono" color="text.disabled" mb={2}>
-              NODES {strategy.graph.nodes.length} / EDGES {strategy.graph.edges.length}
+              <Box as="span" color="signal.cyan">
+                {strategy.pair.toUpperCase()}
+              </Box>
+              {" / "}NODES {strategy.graph.nodes.length} / EDGES {strategy.graph.edges.length}
             </Text>
             <HStack gap={2}>
               <CyberButton size="sm" variant="secondary" onClick={() => onLoad(strategy)}>

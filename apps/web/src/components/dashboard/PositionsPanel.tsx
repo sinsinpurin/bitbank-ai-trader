@@ -64,7 +64,7 @@ export function PositionsPanel({
                 建値 {formatJpy(position.entryPrice)}
               </Text>
               <Text fontSize="xs" color="text.secondary" fontFamily="mono">
-                数量 {position.amount} BTC
+                数量 {position.amount} {position.pair.split("_")[0].toUpperCase()}
               </Text>
             </HStack>
           </Box>

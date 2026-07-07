@@ -56,8 +56,14 @@ export async function pnlRoutes(app: FastifyInstance) {
       prisma.virtualBalance.findMany(),
     ]);
 
-    const candles = getCandleHistory();
-    const currentPrice = candles.length > 0 ? candles[candles.length - 1].close : null;
+    // ペアごとの最新価格(1分足終値ベース)
+    const currentPrices: Record<string, number> = {};
+    for (const pair of config.targetPairs) {
+      const candles = getCandleHistory(pair);
+      if (candles.length > 0) {
+        currentPrices[pair] = candles[candles.length - 1].close;
+      }
+    }
 
     // --- 実現損益の集計 ---
     let realizedPnl = 0;
@@ -111,17 +117,24 @@ export async function pnlRoutes(app: FastifyInstance) {
       reasonMap.set(reason, byReason);
     }
 
-    // --- 含み損益・資産評価 ---
+    // --- 含み損益・資産評価(ペアごとの最新価格で評価。価格不明のペアは0扱い) ---
     const openPositions = openRows.map(toPositionDto);
-    const unrealizedPnl =
-      currentPrice === null
-        ? 0
-        : openPositions.reduce((sum, p) => sum + (currentPrice - p.entryPrice) * p.amount, 0);
+    const unrealizedPnl = openPositions.reduce((sum, p) => {
+      const price = currentPrices[p.pair];
+      return price === undefined ? sum : sum + (price - p.entryPrice) * p.amount;
+    }, 0);
 
     const balanceJpy =
       balances.find((b) => b.currency === "jpy")?.amount ?? INITIAL_JPY_BALANCE;
-    const balanceBtc = balances.find((b) => b.currency === "btc")?.amount ?? 0;
-    const equityJpy = balanceJpy + (currentPrice === null ? 0 : balanceBtc * currentPrice);
+    const assetBalances = Object.fromEntries(
+      balances.filter((b) => b.currency !== "jpy").map((b) => [b.currency, b.amount])
+    );
+    // JPY残高 + 各暗号資産残高の現在値評価(通貨→ペアは "{currency}_jpy" で引く)
+    const equityJpy = balances.reduce((sum, b) => {
+      if (b.currency === "jpy") return sum + b.amount;
+      const price = currentPrices[`${b.currency}_jpy`];
+      return price === undefined ? sum : sum + b.amount * price;
+    }, balances.some((b) => b.currency === "jpy") ? 0 : INITIAL_JPY_BALANCE);
 
     const closedCount = winCount + lossCount;
     const dailyPnl: PnlDailyPoint[] = [...dailyMap.entries()]
@@ -137,8 +150,7 @@ export async function pnlRoutes(app: FastifyInstance) {
       .map((row) => ({ ...toPositionDto(row), closeReason: closeReasonOf(row.trades) }));
 
     return {
-      pair: config.targetPair,
-      currentPrice,
+      currentPrices,
       realizedPnl,
       unrealizedPnl,
       totalPnl: realizedPnl + unrealizedPnl,
@@ -150,7 +162,7 @@ export async function pnlRoutes(app: FastifyInstance) {
       profitFactor: grossLoss > 0 ? grossProfit / grossLoss : null,
       maxDrawdown,
       balanceJpy,
-      balanceBtc,
+      assetBalances,
       equityJpy,
       initialBalanceJpy: INITIAL_JPY_BALANCE,
       equityCurve,

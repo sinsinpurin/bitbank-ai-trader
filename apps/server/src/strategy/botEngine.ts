@@ -13,8 +13,8 @@ import {
 } from "@bitbank-ai-trader/shared";
 
 /**
- * Bot戦略の実行エンジン。
- * ティッカーを1分足の終値シリーズに集約し、アクティブな戦略グラフを評価して
+ * Bot戦略の実行エンジン(マルチペア対応)。
+ * ペアごとにティッカーを1分足の終値シリーズへ集約し、そのペアのアクティブ戦略グラフを評価して
  * 条件の立ち上がり(false→true)でペーパートレードを執行する。
  */
 
@@ -25,13 +25,27 @@ interface CandleBucket {
 
 const HISTORY_LIMIT = 500;
 
-// 確定済みの1分足終値。末尾に「形成中の現在値」を加えた配列で評価する
-const closedCandles: CandleBucket[] = [];
-let formingCandle: CandleBucket | null = null;
+interface PairCandleState {
+  // 確定済みの1分足終値。末尾に「形成中の現在値」を加えた配列で評価する
+  closed: CandleBucket[];
+  forming: CandleBucket | null;
+}
+
+const candleStore = new Map<string, PairCandleState>();
+
+function stateFor(pair: string): PairCandleState {
+  let state = candleStore.get(pair);
+  if (!state) {
+    state = { closed: [], forming: null };
+    candleStore.set(pair, state);
+  }
+  return state;
+}
 
 interface ActiveStrategy {
   id: string;
   name: string;
+  pair: string;
   graph: StrategyGraph;
 }
 
@@ -39,7 +53,8 @@ let activeStrategies: ActiveStrategy[] = [];
 
 // 戦略ごとの直近発火時刻(連続発火を防ぐクールダウン)
 const lastFiredAt = new Map<string, number>();
-let evaluating = false;
+// ペアごとの評価中フラグ(同一ペアの評価が重ならないようにする)
+const evaluatingPairs = new Set<string>();
 
 interface CandlestickResponse {
   success: 0 | 1;
@@ -57,7 +72,7 @@ function jstDateLabel(offsetDays: number): string {
 }
 
 /**
- * bitbank公開REST(1分足)で終値履歴を初期化する。
+ * bitbank公開REST(1分足)で指定ペアの終値履歴を初期化する。
  * サーバー再起動直後でもSMA/RSI等のインジケーターが即座に計算できるようにするため。
  * 取得失敗時は空のまま起動し、ティッカーから履歴を積み上げる。
  */
@@ -79,24 +94,28 @@ export async function seedCandleHistory(pair: string) {
     }
 
     if (candles.length === 0) {
-      console.warn("[botEngine] ローソク足履歴を取得できませんでした。ティッカーから積み上げます");
+      console.warn(
+        `[botEngine] ${pair} のローソク足履歴を取得できませんでした。ティッカーから積み上げます`
+      );
       return;
     }
 
     candles.sort((a, b) => a.time - b.time);
-    closedCandles.length = 0;
-    closedCandles.push(...candles.slice(-HISTORY_LIMIT));
-    formingCandle = null;
-    console.info(`[botEngine] 1分足履歴を${closedCandles.length}本シードしました`);
+    const state = stateFor(pair);
+    state.closed = candles.slice(-HISTORY_LIMIT);
+    state.forming = null;
+    console.info(`[botEngine] ${pair} の1分足履歴を${state.closed.length}本シードしました`);
   } catch (err) {
-    console.warn("[botEngine] ローソク足履歴のシードに失敗しました", err);
+    console.warn(`[botEngine] ${pair} のローソク足履歴のシードに失敗しました`, err);
   }
 }
 
-/** 現在保持している1分足終値履歴(確定足+形成中)を返す */
-export function getCandleHistory(): CandleBucket[] {
-  const series = [...closedCandles];
-  if (formingCandle) series.push(formingCandle);
+/** 指定ペアの1分足終値履歴(確定足+形成中)を返す */
+export function getCandleHistory(pair: string): CandleBucket[] {
+  const state = candleStore.get(pair);
+  if (!state) return [];
+  const series = [...state.closed];
+  if (state.forming) series.push(state.forming);
   return series;
 }
 
@@ -109,36 +128,42 @@ export async function reloadActiveStrategies() {
       console.warn(`[botEngine] 戦略 "${row.name}" のグラフをパースできないためスキップします`);
       return [];
     }
-    return [{ id: row.id, name: row.name, graph }];
+    if (!config.targetPairs.includes(row.pair)) {
+      console.warn(
+        `[botEngine] 戦略 "${row.name}" のペア ${row.pair} は購読対象外(TARGET_PAIRS)のためスキップします`
+      );
+      return [];
+    }
+    return [{ id: row.id, name: row.name, pair: row.pair, graph }];
   });
   console.info(`[botEngine] アクティブ戦略を再読込しました (${activeStrategies.length}件)`);
 }
 
-function recordCandle(price: number, timestampMs: number) {
+function recordCandle(state: PairCandleState, price: number, timestampMs: number) {
   const bucketTime = Math.floor(timestampMs / 1000 / 60) * 60;
 
-  if (!formingCandle || formingCandle.time === bucketTime) {
-    if (!formingCandle) {
+  if (!state.forming || state.forming.time === bucketTime) {
+    if (!state.forming) {
       // シード済み履歴と現在の分が重複しないよう、同じ分以降の確定足を取り除く
-      while (closedCandles.length > 0 && closedCandles[closedCandles.length - 1].time >= bucketTime) {
-        closedCandles.pop();
+      while (state.closed.length > 0 && state.closed[state.closed.length - 1].time >= bucketTime) {
+        state.closed.pop();
       }
     }
-    formingCandle = { time: bucketTime, close: price };
+    state.forming = { time: bucketTime, close: price };
     return;
   }
 
   // 分が進んだので直前の足を確定する
-  closedCandles.push(formingCandle);
-  if (closedCandles.length > HISTORY_LIMIT) {
-    closedCandles.shift();
+  state.closed.push(state.forming);
+  if (state.closed.length > HISTORY_LIMIT) {
+    state.closed.shift();
   }
-  formingCandle = { time: bucketTime, close: price };
+  state.forming = { time: bucketTime, close: price };
 }
 
-function closeSeries(): number[] {
-  const series = closedCandles.map((c) => c.close);
-  if (formingCandle) series.push(formingCandle.close);
+function closeSeries(state: PairCandleState): number[] {
+  const series = state.closed.map((c) => c.close);
+  if (state.forming) series.push(state.forming.close);
   return series;
 }
 
@@ -173,7 +198,7 @@ async function fireSignal(
   };
 
   console.info(
-    `[botEngine] ${strategy.name}: ${action} シグナル (price=${price}, executed=${executed})`
+    `[botEngine] ${strategy.name} (${pair}): ${action} シグナル (price=${price}, executed=${executed})`
   );
   broadcast({ type: "bot_signal", payload: signal });
 
@@ -187,16 +212,18 @@ async function fireSignal(
 
 /** ティッカー受信ごとに呼ばれるエントリポイント */
 export async function onTick(pair: string, price: number, timestampMs: number) {
-  recordCandle(price, timestampMs);
+  const state = stateFor(pair);
+  recordCandle(state, price, timestampMs);
 
-  if (activeStrategies.length === 0 || evaluating) return;
+  const strategies = activeStrategies.filter((s) => s.pair === pair);
+  if (strategies.length === 0 || evaluatingPairs.has(pair)) return;
 
-  const closes = closeSeries();
+  const closes = closeSeries(state);
   if (closes.length < 2) return;
 
-  evaluating = true;
+  evaluatingPairs.add(pair);
   try {
-    for (const strategy of activeStrategies) {
+    for (const strategy of strategies) {
       const cooldownMs = config.bot.cooldownMs;
       const firedAt = lastFiredAt.get(strategy.id) ?? 0;
       if (Date.now() - firedAt < cooldownMs) continue;
@@ -225,6 +252,6 @@ export async function onTick(pair: string, price: number, timestampMs: number) {
   } catch (err) {
     console.error("[botEngine] 戦略評価中にエラーが発生しました", err);
   } finally {
-    evaluating = false;
+    evaluatingPairs.delete(pair);
   }
 }

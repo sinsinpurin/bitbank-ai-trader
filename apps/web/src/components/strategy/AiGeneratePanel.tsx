@@ -17,8 +17,11 @@ const EXAMPLES = [
  * 生成結果は保存せず、onGeneratedでエディタのキャンバスへ展開する。
  */
 export function AiGeneratePanel({
+  pair,
   onGenerated,
 }: {
+  /** 生成対象のペア(エディタで選択中のもの) */
+  pair?: string;
   onGenerated: (result: GeneratedStrategy) => void;
 }) {
   const [prompt, setPrompt] = useState("");
@@ -31,7 +34,7 @@ export function AiGeneratePanel({
     setLoading(true);
     setError(null);
     try {
-      onGenerated(await generateStrategy(trimmed));
+      onGenerated(await generateStrategy(trimmed, pair));
     } catch (err) {
       setError(err instanceof Error ? err.message : "生成に失敗しました");
     } finally {
