@@ -3,6 +3,7 @@ import { config } from "../config";
 import type { AiDecisionResult } from "../ai/claudeService";
 import type { Position } from "@prisma/client";
 import type { TradeReason } from "@bitbank-ai-trader/shared";
+import { isBuyHalted, onPositionClosed } from "./circuitBreaker";
 
 export const INITIAL_JPY_BALANCE = 1_000_000;
 
@@ -24,14 +25,31 @@ async function ensureInitialBalance(pair: string) {
   });
 }
 
+/** 建玉・決済時に指定できるオプション(Bot戦略のリスク設定など) */
+export interface OpenPositionOptions {
+  aiDecisionLogId?: string;
+  /** 発注元のBot戦略ID */
+  strategyId?: string;
+  /** 1回の投入額(円)。未指定はconfig.risk.maxPositionJpy */
+  sizeJpy?: number | null;
+  /** この戦略の最大同時ポジション数。未指定はconfig.risk.maxOpenPositions(ペア全体) */
+  maxOpenPositions?: number | null;
+  /** 出口条件のスナップショット(nullはグローバル設定にフォールバック) */
+  stopLossPct?: number | null;
+  takeProfitPct?: number | null;
+  trailingStopPct?: number | null;
+}
+
 /**
- * 未決済ポジションを現在値で成行決済する。AIの売り判断・自動損切りの双方から呼ばれる共通処理。
+ * 未決済ポジションを現在値で成行決済する。AIの売り判断・自動決済(損切り/利確/トレーリング)・
+ * Bot戦略の売りシグナルから呼ばれる共通処理。
  */
 export async function closePosition(
   position: Position,
   currentPrice: number,
   reason: TradeReason,
-  aiDecisionLogId?: string
+  aiDecisionLogId?: string,
+  closedByStrategyId?: string
 ) {
   const proceeds = currentPrice * position.amount;
   const pnl = (currentPrice - position.entryPrice) * position.amount;
@@ -54,6 +72,7 @@ export async function closePosition(
         reason,
         aiDecisionId: aiDecisionLogId,
         positionId: position.id,
+        strategyId: closedByStrategyId ?? position.strategyId,
       },
     }),
   ]);
@@ -63,21 +82,32 @@ export async function closePosition(
     data: { closedAt: new Date(), closePrice: currentPrice, pnl },
   });
 
+  // サーキットブレーカー(日次損失・戦略連敗)の判定
+  await onPositionClosed(updatedPosition).catch((err) =>
+    console.error("[paperTradingEngine] サーキットブレーカー判定に失敗しました", err)
+  );
+
   return { trade, position: updatedPosition };
 }
 
 /**
  * 未決済の最古ポジションを現在値で成行決済する。
- * ポジションが無い場合は何もしない。AI判断・Bot戦略の売りシグナル双方から呼ばれる。
+ * strategyIdを指定するとその戦略が建てたポジションのみが対象になる(Bot戦略の売りシグナル)。
+ * ポジションが無い場合は何もしない。
  */
 export async function closeOldestPosition(
   pair: string,
   currentPrice: number,
   reason: TradeReason,
-  aiDecisionLogId?: string
+  options: { aiDecisionLogId?: string; strategyId?: string } = {}
 ) {
   const openPosition = await prisma.position.findFirst({
-    where: { pair, side: "buy", closedAt: null },
+    where: {
+      pair,
+      side: "buy",
+      closedAt: null,
+      ...(options.strategyId ? { strategyId: options.strategyId } : {}),
+    },
     orderBy: { openedAt: "asc" },
   });
 
@@ -85,31 +115,46 @@ export async function closeOldestPosition(
     return { trade: null, position: null };
   }
 
-  return closePosition(openPosition, currentPrice, reason, aiDecisionLogId);
+  return closePosition(openPosition, currentPrice, reason, options.aiDecisionLogId, options.strategyId);
 }
 
 /**
  * 新規の買いポジションを建てる。
- * リスク管理(ポジションサイズ上限・最大同時保有数・残高)は config.risk に従い、
- * 制約に掛かった場合は何もせず null を返す。
+ * リスク管理(ポジションサイズ・最大同時保有数・残高・サーキットブレーカー)の制約に
+ * 掛かった場合は何もせず null を返す。
  */
 export async function openBuyPosition(
   pair: string,
   currentPrice: number,
   reason: TradeReason,
-  aiDecisionLogId?: string
+  options: OpenPositionOptions = {}
 ) {
-  await ensureInitialBalance(pair);
-
-  const openPositionCount = await prisma.position.count({
-    where: { pair, side: "buy", closedAt: null },
-  });
-
-  if (openPositionCount >= config.risk.maxOpenPositions) {
+  // サーキットブレーカー発動中は新規買いを止める(決済は止めない)
+  if (isBuyHalted()) {
     return { trade: null, position: null };
   }
 
-  const amount = config.risk.maxPositionJpy / currentPrice;
+  await ensureInitialBalance(pair);
+
+  // 戦略ごとの上限が指定されていればその戦略のポジション数、無ければペア全体で数える
+  const openPositionCount = await prisma.position.count({
+    where: {
+      pair,
+      side: "buy",
+      closedAt: null,
+      ...(options.strategyId && options.maxOpenPositions != null
+        ? { strategyId: options.strategyId }
+        : {}),
+    },
+  });
+  const maxOpenPositions = options.maxOpenPositions ?? config.risk.maxOpenPositions;
+
+  if (openPositionCount >= maxOpenPositions) {
+    return { trade: null, position: null };
+  }
+
+  const sizeJpy = options.sizeJpy ?? config.risk.maxPositionJpy;
+  const amount = sizeJpy / currentPrice;
   const cost = currentPrice * amount;
 
   const jpyBalance = await prisma.virtualBalance.findUniqueOrThrow({
@@ -130,7 +175,17 @@ export async function openBuyPosition(
       data: { amount: { increment: amount } },
     }),
     prisma.position.create({
-      data: { pair, side: "buy", entryPrice: currentPrice, amount },
+      data: {
+        pair,
+        side: "buy",
+        entryPrice: currentPrice,
+        amount,
+        strategyId: options.strategyId,
+        stopLossPct: options.stopLossPct,
+        takeProfitPct: options.takeProfitPct,
+        trailingStopPct: options.trailingStopPct,
+        highestPrice: currentPrice,
+      },
     }),
     prisma.trade.create({
       data: {
@@ -139,7 +194,8 @@ export async function openBuyPosition(
         price: currentPrice,
         amount,
         reason,
-        aiDecisionId: aiDecisionLogId,
+        aiDecisionId: options.aiDecisionLogId,
+        strategyId: options.strategyId,
       },
     }),
   ]);
@@ -162,8 +218,8 @@ export async function applyAiDecision(
   }
 
   if (decision.action === "sell") {
-    return closeOldestPosition(pair, currentPrice, "ai_decision", aiDecisionLogId);
+    return closeOldestPosition(pair, currentPrice, "ai_decision", { aiDecisionLogId });
   }
 
-  return openBuyPosition(pair, currentPrice, "ai_decision", aiDecisionLogId);
+  return openBuyPosition(pair, currentPrice, "ai_decision", { aiDecisionLogId });
 }

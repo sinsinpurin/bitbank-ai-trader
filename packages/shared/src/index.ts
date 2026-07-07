@@ -42,10 +42,17 @@ export interface Position {
   closedAt: number | null;
   closePrice: number | null;
   pnl: number | null;
+  /** このポジションを建てたBot戦略ID(AI判断の場合はnull) */
+  strategyId?: string | null;
 }
 
-/** 約定の発生理由。AIの売買判断・リスク管理の自動損切り・Bot戦略のいずれか */
-export type TradeReason = "ai_decision" | "stop_loss" | "bot_strategy";
+/** 約定の発生理由。AIの売買判断・Bot戦略・リスク管理の自動決済(損切り/利確/トレーリング) */
+export type TradeReason =
+  | "ai_decision"
+  | "stop_loss"
+  | "bot_strategy"
+  | "take_profit"
+  | "trailing_stop";
 
 /** ペーパートレードにおける仮想約定履歴 */
 export interface Trade {
@@ -135,7 +142,21 @@ export interface StrategyGraph {
   edges: StrategyEdge[];
 }
 
-export interface Strategy {
+/** 戦略ごとのリスク設定。nullはサーバーのグローバル設定にフォールバック */
+export interface StrategyRiskSettings {
+  /** 1回の買いで投入する金額(円) */
+  positionSizeJpy: number | null;
+  /** この戦略が同時に持てる未決済ポジション数 */
+  maxOpenPositions: number | null;
+  /** 損切り率(%) */
+  stopLossPct: number | null;
+  /** 利確率(%)。建値からこの%上昇したら自動決済 */
+  takeProfitPct: number | null;
+  /** トレーリングストップ幅(%)。建玉後の最高値からこの%下落したら自動決済 */
+  trailingStopPct: number | null;
+}
+
+export interface Strategy extends StrategyRiskSettings {
   id: string;
   name: string;
   /** 対象ペア(例: "btc_jpy")。このペアの1分足でグラフが評価される */
@@ -181,6 +202,22 @@ export interface BotSignal {
 export interface AppSettings {
   /** AI売買判断ループ(Claude定期呼び出し)を有効にするか */
   aiDecisionEnabled: boolean;
+  /** サーキットブレーカー(日次最大損失・連敗自動停止)を有効にするか */
+  circuitBreakerEnabled: boolean;
+  /** 本日(JST)の実現損失がこの額を超えたら全Botの新規買いを停止する(円) */
+  dailyMaxLossJpy: number;
+  /** 戦略がこの回数連続で負けたら自動でStandbyにする */
+  maxConsecutiveLosses: number;
+}
+
+/** サーキットブレーカーの発動状態 */
+export interface CircuitBreakerStatus {
+  /** 本日の新規買いが停止中か */
+  halted: boolean;
+  /** 停止理由(未発動ならnull) */
+  reason: string | null;
+  /** 発動日時(エポックms、未発動ならnull) */
+  haltedAt: number | null;
 }
 
 /** JST日別のAIトークン使用量(売買判断+戦略生成の合算) */
@@ -215,6 +252,7 @@ export interface AiUsageSummary {
 
 export interface SettingsResponse {
   settings: AppSettings;
+  circuitBreaker: CircuitBreakerStatus;
   usage: AiUsageSummary;
 }
 
@@ -246,6 +284,19 @@ export interface PnlReasonBreakdown {
 /** 決済済みポジション+決済理由 */
 export interface ClosedPositionRecord extends Position {
   closeReason: TradeReason | null;
+}
+
+/** 戦略ごとの実現損益サマリ */
+export interface PnlStrategyBreakdown {
+  /** 戦略ID。AI判断など戦略に紐づかないものはnull */
+  strategyId: string | null;
+  /** 戦略名(削除済みは"(削除済み)"、null枠は"AI判断・その他") */
+  strategyName: string;
+  pair: Pair | null;
+  isActive: boolean;
+  closedCount: number;
+  winCount: number;
+  realizedPnl: number;
 }
 
 /** GET /api/pairs が返す取引対象ペア情報 */
@@ -283,6 +334,8 @@ export interface PnlSummary {
   equityCurve: PnlCurvePoint[];
   dailyPnl: PnlDailyPoint[];
   byReason: PnlReasonBreakdown[];
+  /** 戦略別の実現損益(損益の大きい順) */
+  byStrategy: PnlStrategyBreakdown[];
   openPositions: Position[];
   /** 直近の決済済みポジション(新しい順) */
   closedPositions: ClosedPositionRecord[];

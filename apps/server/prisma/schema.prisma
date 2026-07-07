@@ -32,6 +32,16 @@ model Position {
   closePrice  Float?
   pnl         Float?
 
+  // このポジションを建てたBot戦略(AI判断の場合はnull)
+  strategyId String?
+
+  // 出口条件のスナップショット(建玉時点の戦略設定。nullはグローバル設定にフォールバック)
+  stopLossPct     Float?
+  takeProfitPct   Float?
+  trailingStopPct Float?
+  // トレーリングストップ用の建玉後最高値
+  highestPrice Float?
+
   trades Trade[]
 }
 
@@ -41,8 +51,11 @@ model Trade {
   side          String // "buy" | "sell"
   price         Float
   amount        Float
-  reason        String   @default("ai_decision") // "ai_decision" | "stop_loss"
+  reason        String   @default("ai_decision") // "ai_decision" | "stop_loss" | "bot_strategy" | "take_profit" | "trailing_stop"
   executedAt    DateTime @default(now())
+
+  // 発注元のBot戦略(AI判断・自動損切り等の場合はnull)
+  strategyId String?
 
   aiDecisionId String?
   aiDecision   AiDecisionLog? @relation(fields: [aiDecisionId], references: [id])
@@ -60,6 +73,13 @@ model Strategy {
   isActive    Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  // 戦略ごとのリスク設定(nullはグローバル設定 config.risk にフォールバック)
+  positionSizeJpy  Float?
+  maxOpenPositions Int?
+  stopLossPct      Float?
+  takeProfitPct    Float?
+  trailingStopPct  Float?
 }
 
 // アプリ設定のキーバリューストア(例: aiDecisionEnabled = "true")

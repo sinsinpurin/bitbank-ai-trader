@@ -3,6 +3,7 @@ import { prisma } from "../db/prisma";
 import { broadcast } from "../ws/relay";
 import { config } from "../config";
 import { closeOldestPosition, openBuyPosition } from "../trading/paperTradingEngine";
+import { isBuyHalted } from "../trading/circuitBreaker";
 import { toPositionEvent, toTradeEvent } from "../trading/mappers";
 import {
   evaluateGraph,
@@ -47,6 +48,12 @@ interface ActiveStrategy {
   name: string;
   pair: string;
   graph: StrategyGraph;
+  /** 戦略ごとのリスク設定(nullはグローバル設定へフォールバック) */
+  positionSizeJpy: number | null;
+  maxOpenPositions: number | null;
+  stopLossPct: number | null;
+  takeProfitPct: number | null;
+  trailingStopPct: number | null;
 }
 
 let activeStrategies: ActiveStrategy[] = [];
@@ -134,7 +141,19 @@ export async function reloadActiveStrategies() {
       );
       return [];
     }
-    return [{ id: row.id, name: row.name, pair: row.pair, graph }];
+    return [
+      {
+        id: row.id,
+        name: row.name,
+        pair: row.pair,
+        graph,
+        positionSizeJpy: row.positionSizeJpy,
+        maxOpenPositions: row.maxOpenPositions,
+        stopLossPct: row.stopLossPct,
+        takeProfitPct: row.takeProfitPct,
+        trailingStopPct: row.trailingStopPct,
+      },
+    ];
   });
   console.info(`[botEngine] アクティブ戦略を再読込しました (${activeStrategies.length}件)`);
 }
@@ -173,17 +192,27 @@ async function fireSignal(
   price: number,
   action: OrderSide
 ) {
+  const buyBlockedByBreaker = action === "buy" && isBuyHalted();
   const result =
     action === "buy"
-      ? await openBuyPosition(pair, price, "bot_strategy")
-      : await closeOldestPosition(pair, price, "bot_strategy");
+      ? await openBuyPosition(pair, price, "bot_strategy", {
+          strategyId: strategy.id,
+          sizeJpy: strategy.positionSizeJpy,
+          maxOpenPositions: strategy.maxOpenPositions,
+          stopLossPct: strategy.stopLossPct,
+          takeProfitPct: strategy.takeProfitPct,
+          trailingStopPct: strategy.trailingStopPct,
+        })
+      : await closeOldestPosition(pair, price, "bot_strategy", { strategyId: strategy.id });
 
   const executed = result.trade !== null;
   const note = executed
     ? `${action.toUpperCase()} 条件が成立し、約定しました`
     : action === "buy"
-      ? "BUY 条件が成立しましたが、リスク制約(ポジション数・残高)により見送りました"
-      : "SELL 条件が成立しましたが、決済対象のポジションがありません";
+      ? buyBlockedByBreaker
+        ? "BUY 条件が成立しましたが、サーキットブレーカー発動中のため見送りました"
+        : "BUY 条件が成立しましたが、リスク制約(ポジション数・残高)により見送りました"
+      : "SELL 条件が成立しましたが、この戦略の決済対象ポジションがありません";
 
   const signal: BotSignal = {
     id: randomUUID(),

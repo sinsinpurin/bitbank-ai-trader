@@ -25,5 +25,6 @@ export function toPositionEvent(position: PrismaPosition): Position {
     closedAt: position.closedAt ? position.closedAt.getTime() : null,
     closePrice: position.closePrice ?? null,
     pnl: position.pnl ?? null,
+    strategyId: position.strategyId ?? null,
   };
 }

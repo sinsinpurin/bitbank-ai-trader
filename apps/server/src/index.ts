@@ -6,7 +6,11 @@ import { prisma } from "./db/prisma";
 import { subscribeTickers } from "./bitbank/publicStream";
 import { registerClient, broadcast } from "./ws/relay";
 import { recordPrice, startDecisionLoop } from "./ai/decisionLoop";
-import { checkStopLosses } from "./trading/riskManager";
+import { checkExits } from "./trading/riskManager";
+import {
+  loadCircuitBreakerState,
+  registerOnStrategiesChanged,
+} from "./trading/circuitBreaker";
 import {
   getCandleHistory,
   onTick,
@@ -80,6 +84,8 @@ async function main() {
     });
   });
 
+  await loadCircuitBreakerState();
+  registerOnStrategiesChanged(reloadActiveStrategies);
   await reloadActiveStrategies();
   await Promise.all(config.targetPairs.map((pair) => seedCandleHistory(pair)));
 
@@ -89,8 +95,8 @@ async function main() {
       recordPrice(ticker.last);
     }
     broadcast({ type: "ticker", payload: ticker });
-    checkStopLosses(ticker.pair, ticker.last).catch((err) =>
-      app.log.error(err, "損切りチェックに失敗しました")
+    checkExits(ticker.pair, ticker.last).catch((err) =>
+      app.log.error(err, "出口条件チェックに失敗しました")
     );
     onTick(ticker.pair, ticker.last, ticker.timestamp).catch((err) =>
       app.log.error(err, "Bot戦略の評価に失敗しました")

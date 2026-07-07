@@ -17,6 +17,11 @@ function toStrategyDto(row: PrismaStrategy): Strategy {
     isActive: row.isActive,
     createdAt: row.createdAt.getTime(),
     updatedAt: row.updatedAt.getTime(),
+    positionSizeJpy: row.positionSizeJpy,
+    maxOpenPositions: row.maxOpenPositions,
+    stopLossPct: row.stopLossPct,
+    takeProfitPct: row.takeProfitPct,
+    trailingStopPct: row.trailingStopPct,
   };
 }
 
@@ -26,6 +31,46 @@ interface StrategyBody {
   description?: string;
   graph?: StrategyGraph;
   isActive?: boolean;
+  // リスク設定(nullでグローバル設定へ戻す)
+  positionSizeJpy?: number | null;
+  maxOpenPositions?: number | null;
+  stopLossPct?: number | null;
+  takeProfitPct?: number | null;
+  trailingStopPct?: number | null;
+}
+
+/** リスク設定の妥当性を検証し、エラーメッセージまたはnullを返す */
+function validateRiskSettings(body: StrategyBody): string | null {
+  const positives: [string, number | null | undefined][] = [
+    ["positionSizeJpy", body.positionSizeJpy],
+    ["stopLossPct", body.stopLossPct],
+    ["takeProfitPct", body.takeProfitPct],
+    ["trailingStopPct", body.trailingStopPct],
+  ];
+  for (const [key, value] of positives) {
+    if (value !== undefined && value !== null && (!Number.isFinite(value) || value <= 0)) {
+      return `${key} は正の数値またはnullで指定してください`;
+    }
+  }
+  if (
+    body.maxOpenPositions !== undefined &&
+    body.maxOpenPositions !== null &&
+    (!Number.isInteger(body.maxOpenPositions) || body.maxOpenPositions < 1)
+  ) {
+    return "maxOpenPositions は1以上の整数またはnullで指定してください";
+  }
+  return null;
+}
+
+/** bodyに含まれるリスク設定フィールドだけをPrismaのdataへ写す */
+function riskSettingsData(body: StrategyBody) {
+  return {
+    ...(body.positionSizeJpy !== undefined ? { positionSizeJpy: body.positionSizeJpy } : {}),
+    ...(body.maxOpenPositions !== undefined ? { maxOpenPositions: body.maxOpenPositions } : {}),
+    ...(body.stopLossPct !== undefined ? { stopLossPct: body.stopLossPct } : {}),
+    ...(body.takeProfitPct !== undefined ? { takeProfitPct: body.takeProfitPct } : {}),
+    ...(body.trailingStopPct !== undefined ? { trailingStopPct: body.trailingStopPct } : {}),
+  };
 }
 
 function isValidPair(pair: string): boolean {
@@ -84,6 +129,10 @@ export async function strategyRoutes(app: FastifyInstance) {
     if (pair !== undefined && !isValidPair(pair)) {
       return reply.status(400).send({ error: `未対応のペアです: ${pair}` });
     }
+    const riskError = validateRiskSettings(request.body ?? {});
+    if (riskError) {
+      return reply.status(400).send({ error: riskError });
+    }
 
     const row = await prisma.strategy.create({
       data: {
@@ -91,6 +140,7 @@ export async function strategyRoutes(app: FastifyInstance) {
         pair: pair ?? config.targetPair,
         description: description ?? "",
         graph: JSON.stringify(graph),
+        ...riskSettingsData(request.body ?? {}),
       },
     });
 
@@ -111,6 +161,10 @@ export async function strategyRoutes(app: FastifyInstance) {
       if (pair !== undefined && !isValidPair(pair)) {
         return reply.status(400).send({ error: `未対応のペアです: ${pair}` });
       }
+      const riskError = validateRiskSettings(request.body ?? {});
+      if (riskError) {
+        return reply.status(400).send({ error: riskError });
+      }
 
       const existing = await prisma.strategy.findUnique({ where: { id } });
       if (!existing) {
@@ -125,6 +179,7 @@ export async function strategyRoutes(app: FastifyInstance) {
           ...(description !== undefined ? { description } : {}),
           ...(graph !== undefined ? { graph: JSON.stringify(graph) } : {}),
           ...(isActive !== undefined ? { isActive } : {}),
+          ...riskSettingsData(request.body ?? {}),
         },
       });
 

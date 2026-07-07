@@ -5,6 +5,7 @@ import type {
   PnlCurvePoint,
   PnlDailyPoint,
   PnlReasonBreakdown,
+  PnlStrategyBreakdown,
   PnlSummary,
   Position,
   TradeReason,
@@ -27,6 +28,7 @@ function toPositionDto(row: PrismaPosition): Position {
     closedAt: row.closedAt?.getTime() ?? null,
     closePrice: row.closePrice,
     pnl: row.pnl,
+    strategyId: row.strategyId ?? null,
   };
 }
 
@@ -144,6 +146,49 @@ export async function pnlRoutes(app: FastifyInstance) {
       ([reason, v]) => ({ reason, ...v })
     );
 
+    // --- 戦略別の実現損益 ---
+    const strategyAgg = new Map<
+      string | null,
+      { pnl: number; count: number; winCount: number; pair: string | null }
+    >();
+    for (const row of closedRows) {
+      const key = row.strategyId ?? null;
+      const agg = strategyAgg.get(key) ?? { pnl: 0, count: 0, winCount: 0, pair: row.pair };
+      agg.pnl += row.pnl ?? 0;
+      agg.count += 1;
+      if ((row.pnl ?? 0) >= 0) agg.winCount += 1;
+      if (agg.pair !== row.pair) agg.pair = null; // 複数ペアにまたがる場合はnull
+      strategyAgg.set(key, agg);
+    }
+
+    const strategyIds = [...strategyAgg.keys()].filter((id): id is string => id !== null);
+    const strategyRows =
+      strategyIds.length > 0
+        ? await prisma.strategy.findMany({
+            where: { id: { in: strategyIds } },
+            select: { id: true, name: true, pair: true, isActive: true },
+          })
+        : [];
+    const strategyById = new Map(strategyRows.map((s) => [s.id, s]));
+
+    const byStrategy: PnlStrategyBreakdown[] = [...strategyAgg.entries()]
+      .map(([strategyId, agg]) => {
+        const strategy = strategyId ? strategyById.get(strategyId) : undefined;
+        return {
+          strategyId,
+          strategyName:
+            strategyId === null
+              ? "AI判断・その他"
+              : strategy?.name ?? "(削除済み)",
+          pair: strategy?.pair ?? agg.pair,
+          isActive: strategy?.isActive ?? false,
+          closedCount: agg.count,
+          winCount: agg.winCount,
+          realizedPnl: agg.pnl,
+        };
+      })
+      .sort((a, b) => b.realizedPnl - a.realizedPnl);
+
     const closedPositions: ClosedPositionRecord[] = closedRows
       .slice(-MAX_CLOSED_POSITIONS)
       .reverse()
@@ -168,6 +213,7 @@ export async function pnlRoutes(app: FastifyInstance) {
       equityCurve,
       dailyPnl,
       byReason,
+      byStrategy,
       openPositions,
       closedPositions,
     };

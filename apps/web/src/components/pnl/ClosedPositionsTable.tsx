@@ -14,6 +14,8 @@ const REASON_LABEL: Record<TradeReason, string> = {
   ai_decision: "AI判断",
   stop_loss: "損切り",
   bot_strategy: "BOT戦略",
+  take_profit: "利確",
+  trailing_stop: "トレーリング",
 };
 
 const COLUMNS = "minmax(90px, 1fr) minmax(80px, 0.8fr) minmax(70px, 0.8fr) repeat(2, minmax(100px, 1fr)) minmax(90px, 0.9fr) minmax(70px, 0.8fr) minmax(100px, 1fr)";

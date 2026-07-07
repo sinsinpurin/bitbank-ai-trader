@@ -6,11 +6,19 @@ import { formatSignedJpy, pnlColor } from "./format";
 
 const REASON_STYLE: Record<TradeReason, { label: string; color: string }> = {
   ai_decision: { label: "AI判断", color: "#FF003C" },
-  stop_loss: { label: "自動損切り", color: "#FF8A1E" },
   bot_strategy: { label: "BOT戦略", color: "#00E5FF" },
+  take_profit: { label: "自動利確", color: "#39FF88" },
+  trailing_stop: { label: "トレーリング", color: "#FF8A1E" },
+  stop_loss: { label: "自動損切り", color: "#FF8A1E" },
 };
 
-const REASON_ORDER: TradeReason[] = ["ai_decision", "bot_strategy", "stop_loss"];
+const REASON_ORDER: TradeReason[] = [
+  "ai_decision",
+  "bot_strategy",
+  "take_profit",
+  "trailing_stop",
+  "stop_loss",
+];
 
 /** 決済理由(AI判断 / BOT戦略 / 自動損切り)ごとの実現損益内訳 */
 export function ReasonBreakdownPanel({ byReason }: { byReason: PnlReasonBreakdown[] }) {

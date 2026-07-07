@@ -36,6 +36,13 @@ import { StrategyList } from "@/components/strategy/StrategyList";
 import { BotSignalFeed } from "@/components/strategy/BotSignalFeed";
 import { TemplateGallery } from "@/components/strategy/TemplateGallery";
 import { AiGeneratePanel } from "@/components/strategy/AiGeneratePanel";
+import {
+  EMPTY_RISK_FORM,
+  RiskSettingsPanel,
+  riskFormFromStrategy,
+  riskFormToInput,
+  type RiskFormValues,
+} from "@/components/strategy/RiskSettingsPanel";
 import { StrategyPreview } from "@/components/strategy/StrategyPreview";
 import { describeGraph } from "@/components/strategy/describeGraph";
 import { STRATEGY_TEMPLATES, type StrategyTemplate } from "@/components/strategy/strategyTemplates";
@@ -120,6 +127,7 @@ function StrategyEditor() {
   const [name, setName] = useState(STRATEGY_TEMPLATES[0].name);
   const { pairs, primaryPair } = usePairs();
   const [pair, setPair] = useState(primaryPair);
+  const [riskForm, setRiskForm] = useState<RiskFormValues>(EMPTY_RISK_FORM);
 
   // /api/pairsの取得完了後、選択中ペアが対象外なら先頭ペアへ寄せる
   useEffect(() => {
@@ -225,14 +233,19 @@ function StrategyEditor() {
       notify(error, "red");
       return;
     }
+    const risk = riskFormToInput(riskForm);
+    if (!risk.ok) {
+      notify(risk.error, "red");
+      return;
+    }
     setSaving(true);
     try {
       const graph = toGraph(nodes, edges);
       if (selectedId) {
-        await updateStrategy(selectedId, { name: name.trim(), pair, graph });
+        await updateStrategy(selectedId, { name: name.trim(), pair, graph, ...risk.value });
         notify("戦略を上書き保存しました");
       } else {
-        const created = await createStrategy({ name: name.trim(), pair, graph });
+        const created = await createStrategy({ name: name.trim(), pair, graph, ...risk.value });
         setSelectedId(created.id);
         notify("戦略を保存しました。Deployで稼働開始できます");
       }
@@ -242,7 +255,7 @@ function StrategyEditor() {
     } finally {
       setSaving(false);
     }
-  }, [validate, nodes, edges, selectedId, name, pair, notify, refreshList]);
+  }, [validate, nodes, edges, selectedId, name, pair, riskForm, notify, refreshList]);
 
   const handleLoad = useCallback(
     (strategy: Strategy) => {
@@ -252,6 +265,7 @@ function StrategyEditor() {
       setSelectedId(strategy.id);
       setName(strategy.name);
       setPair(strategy.pair);
+      setRiskForm(riskFormFromStrategy(strategy));
       notify(`戦略 "${strategy.name}" を読み込みました`);
     },
     [setNodes, setEdges, notify]
@@ -262,6 +276,7 @@ function StrategyEditor() {
     setEdges([]);
     setSelectedId(null);
     setName("NEW STRATEGY");
+    setRiskForm(EMPTY_RISK_FORM);
   }, [setNodes, setEdges]);
 
   const handleToggleActive = useCallback(
@@ -488,6 +503,10 @@ function StrategyEditor() {
 
           <CyberPanel title="Strategy Preview" code="02 / 意訳" accent="cyan" collapsible>
             <StrategyPreview description={preview} />
+          </CyberPanel>
+
+          <CyberPanel title="Risk Settings / リスク設定" code="02b / RISK" accent="red" collapsible>
+            <RiskSettingsPanel values={riskForm} onChange={setRiskForm} />
           </CyberPanel>
         </Stack>
       </GridItem>

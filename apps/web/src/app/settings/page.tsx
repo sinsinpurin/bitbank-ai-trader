@@ -6,9 +6,10 @@ import type { SettingsResponse } from "@bitbank-ai-trader/shared";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { CyberPanel } from "@/components/ui/CyberPanel";
 import { AiLoopControlPanel } from "@/components/settings/AiLoopControlPanel";
+import { CircuitBreakerPanel } from "@/components/settings/CircuitBreakerPanel";
 import { UsageSummaryTiles } from "@/components/settings/UsageSummaryTiles";
 import { UsageDailyTable } from "@/components/settings/UsageDailyTable";
-import { fetchSettings, updateSettings } from "@/lib/settingsApi";
+import { fetchSettings, updateSettings, type UpdateSettingsInput } from "@/lib/settingsApi";
 
 const REFRESH_INTERVAL_MS = 30_000;
 
@@ -32,21 +33,20 @@ export default function SettingsPage() {
     return () => clearInterval(timer);
   }, [refresh]);
 
-  const handleToggle = useCallback(
-    async (next: boolean) => {
-      setSaving(true);
-      try {
-        const settings = await updateSettings({ aiDecisionEnabled: next });
-        setData((prev) => (prev ? { ...prev, settings } : prev));
-        setError(null);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "設定の更新に失敗しました");
-      } finally {
-        setSaving(false);
-      }
-    },
-    []
-  );
+  const handleUpdate = useCallback(async (input: UpdateSettingsInput) => {
+    setSaving(true);
+    try {
+      const result = await updateSettings(input);
+      setData((prev) =>
+        prev ? { ...prev, settings: result.settings, circuitBreaker: result.circuitBreaker } : prev
+      );
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "設定の更新に失敗しました");
+    } finally {
+      setSaving(false);
+    }
+  }, []);
 
   return (
     <Box minH="100vh">
@@ -69,19 +69,30 @@ export default function SettingsPage() {
                   enabled={data.settings.aiDecisionEnabled}
                   usage={data.usage}
                   saving={saving}
-                  onToggle={handleToggle}
+                  onToggle={(next) => handleUpdate({ aiDecisionEnabled: next })}
                 />
               </CyberPanel>
             </GridItem>
 
             <GridItem>
-              <CyberPanel title="AI Usage / 使用量サマリ" code="02 / COST" accent="cyan" delay={0.05}>
+              <CyberPanel title="Circuit Breaker / 安全装置" code="02 / SAFE" accent="red" delay={0.05}>
+                <CircuitBreakerPanel
+                  settings={data.settings}
+                  status={data.circuitBreaker}
+                  saving={saving}
+                  onUpdate={handleUpdate}
+                />
+              </CyberPanel>
+            </GridItem>
+
+            <GridItem colSpan={{ base: 1, xl: 2 }}>
+              <CyberPanel title="AI Usage / 使用量サマリ" code="03 / COST" accent="cyan" delay={0.1}>
                 <UsageSummaryTiles usage={data.usage} />
               </CyberPanel>
             </GridItem>
 
             <GridItem colSpan={{ base: 1, xl: 2 }}>
-              <CyberPanel title="Daily Usage / 日別使用量 (JST)" code="03 / LOG" accent="cyan" delay={0.1}>
+              <CyberPanel title="Daily Usage / 日別使用量 (JST)" code="04 / LOG" accent="cyan" delay={0.15}>
                 <UsageDailyTable days={data.usage.days} />
               </CyberPanel>
             </GridItem>
