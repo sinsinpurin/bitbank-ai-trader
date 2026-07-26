@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { href: "/strategies", label: "Bot Blueprint" },
   { href: "/pnl", label: "P&L Report" },
   { href: "/settings", label: "Settings" },
+  { href: "/docs", label: "Docs" },
 ];
 
 export function AppHeader({ connected }: { connected?: boolean }) {

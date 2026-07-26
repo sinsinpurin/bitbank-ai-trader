@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Box, Grid, GridItem, HStack, Input, Stack, Text } from "@chakra-ui/react";
+import { Box, Grid, GridItem, HStack, Input, Stack, Text, chakra } from "@chakra-ui/react";
 import {
   Background,
   BackgroundVariant,
@@ -36,6 +36,13 @@ import { StrategyList } from "@/components/strategy/StrategyList";
 import { BotSignalFeed } from "@/components/strategy/BotSignalFeed";
 import { TemplateGallery } from "@/components/strategy/TemplateGallery";
 import { AiGeneratePanel } from "@/components/strategy/AiGeneratePanel";
+import {
+  EMPTY_RISK_FORM,
+  RiskSettingsPanel,
+  riskFormFromStrategy,
+  riskFormToInput,
+  type RiskFormValues,
+} from "@/components/strategy/RiskSettingsPanel";
 import { StrategyPreview } from "@/components/strategy/StrategyPreview";
 import { describeGraph } from "@/components/strategy/describeGraph";
 import { STRATEGY_TEMPLATES, type StrategyTemplate } from "@/components/strategy/strategyTemplates";
@@ -44,6 +51,7 @@ import { LiveValuesContext } from "@/components/strategy/LiveValuesContext";
 import { createStrategy, deleteStrategy, fetchStrategies, updateStrategy } from "@/lib/strategyApi";
 import { useLiveCandles } from "@/lib/useLiveCandles";
 import { useServerEvents } from "@/lib/useServerEvents";
+import { pairLabel, usePairs } from "@/lib/pairs";
 
 const nodeTypes: NodeTypes = Object.fromEntries(
   NODE_CATALOG.map((def) => [def.type, BlueprintNodeView])
@@ -117,6 +125,16 @@ function StrategyEditor() {
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [name, setName] = useState(STRATEGY_TEMPLATES[0].name);
+  const { pairs, primaryPair } = usePairs();
+  const [pair, setPair] = useState(primaryPair);
+  const [riskForm, setRiskForm] = useState<RiskFormValues>(EMPTY_RISK_FORM);
+
+  // /api/pairsの取得完了後、選択中ペアが対象外なら先頭ペアへ寄せる
+  useEffect(() => {
+    if (!pairs.includes(pair)) {
+      setPair(primaryPair);
+    }
+  }, [pairs, primaryPair, pair]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ text: string; tone: "cyan" | "red" } | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -215,14 +233,19 @@ function StrategyEditor() {
       notify(error, "red");
       return;
     }
+    const risk = riskFormToInput(riskForm);
+    if (!risk.ok) {
+      notify(risk.error, "red");
+      return;
+    }
     setSaving(true);
     try {
       const graph = toGraph(nodes, edges);
       if (selectedId) {
-        await updateStrategy(selectedId, { name: name.trim(), graph });
+        await updateStrategy(selectedId, { name: name.trim(), pair, graph, ...risk.value });
         notify("戦略を上書き保存しました");
       } else {
-        const created = await createStrategy({ name: name.trim(), graph });
+        const created = await createStrategy({ name: name.trim(), pair, graph, ...risk.value });
         setSelectedId(created.id);
         notify("戦略を保存しました。Deployで稼働開始できます");
       }
@@ -232,7 +255,7 @@ function StrategyEditor() {
     } finally {
       setSaving(false);
     }
-  }, [validate, nodes, edges, selectedId, name, notify, refreshList]);
+  }, [validate, nodes, edges, selectedId, name, pair, riskForm, notify, refreshList]);
 
   const handleLoad = useCallback(
     (strategy: Strategy) => {
@@ -241,6 +264,8 @@ function StrategyEditor() {
       setEdges(e);
       setSelectedId(strategy.id);
       setName(strategy.name);
+      setPair(strategy.pair);
+      setRiskForm(riskFormFromStrategy(strategy));
       notify(`戦略 "${strategy.name}" を読み込みました`);
     },
     [setNodes, setEdges, notify]
@@ -251,6 +276,7 @@ function StrategyEditor() {
     setEdges([]);
     setSelectedId(null);
     setName("NEW STRATEGY");
+    setRiskForm(EMPTY_RISK_FORM);
   }, [setNodes, setEdges]);
 
   const handleToggleActive = useCallback(
@@ -273,8 +299,8 @@ function StrategyEditor() {
   // キャンバス上のグラフを日本語の戦略説明へ変換(編集に追従)
   const preview = useMemo(() => describeGraph(toGraph(nodes, edges)), [nodes, edges]);
 
-  // 現在の相場データ(サーバーの1分足履歴)で各ノードを評価し、◯/✕・数値をライブ表示する
-  const closes = useLiveCandles();
+  // 現在の相場データ(選択ペアの1分足履歴)で各ノードを評価し、◯/✕・数値をライブ表示する
+  const closes = useLiveCandles(pair);
   const liveValues = useMemo<Record<string, NodeLiveValue> | null>(() => {
     if (closes.length < 2) return null;
     return evaluateGraph(toGraph(nodes, edges), closes, { collectValues: true }).nodeValues;
@@ -368,6 +394,28 @@ function StrategyEditor() {
               color="text.primary"
               _focus={{ borderColor: "signal.cyan", boxShadow: "glowCyanSm" }}
             />
+            <chakra.select
+              value={pair}
+              onChange={(e) => setPair(e.target.value)}
+              bg="bg.surface"
+              borderWidth="1px"
+              borderColor="border.gridCyan"
+              borderRadius="0"
+              fontFamily="heading"
+              fontSize="13px"
+              letterSpacing="0.1em"
+              color="signal.cyan"
+              px={3}
+              py={2}
+              cursor="pointer"
+              _focus={{ borderColor: "signal.cyan", boxShadow: "glowCyanSm", outline: "none" }}
+            >
+              {pairs.map((p) => (
+                <option key={p} value={p} style={{ background: "#131318" }}>
+                  {pairLabel(p)}
+                </option>
+              ))}
+            </chakra.select>
             <CyberButton variant="primary" onClick={handleSave} disabled={saving}>
               {saving ? "Saving..." : selectedId ? "Update" : "Save"}
             </CyberButton>
@@ -449,12 +497,16 @@ function StrategyEditor() {
             パレットをクリック or ドラッグ&ドロップで配置 / ポート同士をドラッグで接続 /
             Backspaceで選択要素を削除。シアン◈=数値、オレンジ◈=条件(真偽)。{" "}
             {liveValues
-              ? `LIVE: 1分足×${closes.length}本で各ノードを評価中(10秒ごと更新)`
+              ? `LIVE: ${pairLabel(pair)} 1分足×${closes.length}本で各ノードを評価中(10秒ごと更新)`
               : "LIVE評価は停止中(サーバー未接続またはデータ蓄積中)"}
           </Text>
 
           <CyberPanel title="Strategy Preview" code="02 / 意訳" accent="cyan" collapsible>
             <StrategyPreview description={preview} />
+          </CyberPanel>
+
+          <CyberPanel title="Risk Settings / リスク設定" code="02b / RISK" accent="red" collapsible>
+            <RiskSettingsPanel values={riskForm} onChange={setRiskForm} />
           </CyberPanel>
         </Stack>
       </GridItem>
@@ -462,7 +514,7 @@ function StrategyEditor() {
       <GridItem>
         <Stack gap={6}>
           <CyberPanel title="AI Strategy Gen" code="03 / GEN" accent="red">
-            <AiGeneratePanel onGenerated={handleGenerated} />
+            <AiGeneratePanel pair={pair} onGenerated={handleGenerated} />
           </CyberPanel>
           <CyberPanel title="Strategy Templates" code="04 / LIB" accent="cyan" collapsible>
             <Box maxH="380px" overflowY="auto" pr={1}>

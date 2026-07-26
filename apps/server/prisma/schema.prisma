@@ -32,6 +32,18 @@ model Position {
   closePrice  Float?
   pnl         Float?
 
+  // このポジションを建てたBot戦略(AI判断の場合はnull)
+  strategyId String?
+
+  // 出口条件のスナップショット(建玉時点の戦略設定。nullはグローバル設定にフォールバック)
+  stopLossPct     Float?
+  takeProfitPct   Float?
+  trailingStopPct Float?
+  // トレーリングストップ用の建玉後最高値
+  highestPrice Float?
+  // 建玉時に支払った手数料(円)。決済時のpnl計算で控除する
+  entryFee Float @default(0)
+
   trades Trade[]
 }
 
@@ -41,8 +53,14 @@ model Trade {
   side          String // "buy" | "sell"
   price         Float
   amount        Float
-  reason        String   @default("ai_decision") // "ai_decision" | "stop_loss"
+  reason        String   @default("ai_decision") // "ai_decision" | "stop_loss" | "bot_strategy" | "take_profit" | "trailing_stop"
   executedAt    DateTime @default(now())
+
+  // 発注元のBot戦略(AI判断・自動損切り等の場合はnull)
+  strategyId String?
+
+  // この約定で支払った手数料(円換算、taker想定のシミュレーション値)
+  fee Float @default(0)
 
   aiDecisionId String?
   aiDecision   AiDecisionLog? @relation(fields: [aiDecisionId], references: [id])
@@ -54,11 +72,19 @@ model Trade {
 model Strategy {
   id          String   @id @default(cuid())
   name        String
+  pair        String   @default("btc_jpy") // 対象ペア(例: "btc_jpy" | "eth_jpy")
   description String   @default("")
   graph       String // StrategyGraph(ノード/エッジ)のJSON文字列
   isActive    Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  // 戦略ごとのリスク設定(nullはグローバル設定 config.risk にフォールバック)
+  positionSizeJpy  Float?
+  maxOpenPositions Int?
+  stopLossPct      Float?
+  takeProfitPct    Float?
+  trailingStopPct  Float?
 }
 
 // アプリ設定のキーバリューストア(例: aiDecisionEnabled = "true")
@@ -77,6 +103,30 @@ model AiGenerationLog {
   inputTokens  Int
   outputTokens Int
   createdAt    DateTime @default(now())
+}
+
+// ダッシュボードのカスタムシグナルモニターの監視条件
+model SignalWatch {
+  id        String   @id @default(cuid())
+  name      String   @default("")
+  pair      String
+  config    String // SignalWatchConfig(left/op/right)のJSON文字列
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Bot戦略シグナルの発火履歴(WS配信とは別に永続化し、リロード後も参照できるようにする)
+model BotSignalLog {
+  id           String   @id
+  strategyId   String
+  strategyName String
+  pair         String
+  action       String // "buy" | "sell"
+  price        Float
+  triggeredAt  DateTime
+  executed     Boolean
+  note         String
 }
 
 model VirtualBalance {

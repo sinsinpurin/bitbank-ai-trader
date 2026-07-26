@@ -5,6 +5,7 @@ import type {
   PnlCurvePoint,
   PnlDailyPoint,
   PnlReasonBreakdown,
+  PnlStrategyBreakdown,
   PnlSummary,
   Position,
   TradeReason,
@@ -27,6 +28,7 @@ function toPositionDto(row: PrismaPosition): Position {
     closedAt: row.closedAt?.getTime() ?? null,
     closePrice: row.closePrice,
     pnl: row.pnl,
+    strategyId: row.strategyId ?? null,
   };
 }
 
@@ -43,7 +45,7 @@ function closeReasonOf(trades: PrismaTrade[]): TradeReason | null {
 
 export async function pnlRoutes(app: FastifyInstance) {
   app.get("/api/pnl", async (): Promise<PnlSummary> => {
-    const [closedRows, openRows, balances] = await Promise.all([
+    const [closedRows, openRows, balances, feeAgg] = await Promise.all([
       prisma.position.findMany({
         where: { closedAt: { not: null } },
         orderBy: { closedAt: "asc" },
@@ -54,10 +56,18 @@ export async function pnlRoutes(app: FastifyInstance) {
         orderBy: { openedAt: "asc" },
       }),
       prisma.virtualBalance.findMany(),
+      prisma.trade.aggregate({ _sum: { fee: true } }),
     ]);
+    const totalFeesJpy = feeAgg._sum.fee ?? 0;
 
-    const candles = getCandleHistory();
-    const currentPrice = candles.length > 0 ? candles[candles.length - 1].close : null;
+    // ペアごとの最新価格(1分足終値ベース)
+    const currentPrices: Record<string, number> = {};
+    for (const pair of config.targetPairs) {
+      const candles = getCandleHistory(pair);
+      if (candles.length > 0) {
+        currentPrices[pair] = candles[candles.length - 1].close;
+      }
+    }
 
     // --- 実現損益の集計 ---
     let realizedPnl = 0;
@@ -111,17 +121,24 @@ export async function pnlRoutes(app: FastifyInstance) {
       reasonMap.set(reason, byReason);
     }
 
-    // --- 含み損益・資産評価 ---
+    // --- 含み損益・資産評価(ペアごとの最新価格で評価。価格不明のペアは0扱い) ---
     const openPositions = openRows.map(toPositionDto);
-    const unrealizedPnl =
-      currentPrice === null
-        ? 0
-        : openPositions.reduce((sum, p) => sum + (currentPrice - p.entryPrice) * p.amount, 0);
+    const unrealizedPnl = openPositions.reduce((sum, p) => {
+      const price = currentPrices[p.pair];
+      return price === undefined ? sum : sum + (price - p.entryPrice) * p.amount;
+    }, 0);
 
     const balanceJpy =
       balances.find((b) => b.currency === "jpy")?.amount ?? INITIAL_JPY_BALANCE;
-    const balanceBtc = balances.find((b) => b.currency === "btc")?.amount ?? 0;
-    const equityJpy = balanceJpy + (currentPrice === null ? 0 : balanceBtc * currentPrice);
+    const assetBalances = Object.fromEntries(
+      balances.filter((b) => b.currency !== "jpy").map((b) => [b.currency, b.amount])
+    );
+    // JPY残高 + 各暗号資産残高の現在値評価(通貨→ペアは "{currency}_jpy" で引く)
+    const equityJpy = balances.reduce((sum, b) => {
+      if (b.currency === "jpy") return sum + b.amount;
+      const price = currentPrices[`${b.currency}_jpy`];
+      return price === undefined ? sum : sum + b.amount * price;
+    }, balances.some((b) => b.currency === "jpy") ? 0 : INITIAL_JPY_BALANCE);
 
     const closedCount = winCount + lossCount;
     const dailyPnl: PnlDailyPoint[] = [...dailyMap.entries()]
@@ -131,14 +148,60 @@ export async function pnlRoutes(app: FastifyInstance) {
       ([reason, v]) => ({ reason, ...v })
     );
 
+    // --- 戦略別の実現損益 ---
+    const strategyAgg = new Map<
+      string | null,
+      { pnl: number; count: number; winCount: number; pair: string | null }
+    >();
+    for (const row of closedRows) {
+      const key = row.strategyId ?? null;
+      const agg = strategyAgg.get(key) ?? { pnl: 0, count: 0, winCount: 0, pair: row.pair };
+      agg.pnl += row.pnl ?? 0;
+      agg.count += 1;
+      if ((row.pnl ?? 0) >= 0) agg.winCount += 1;
+      if (agg.pair !== row.pair) agg.pair = null; // 複数ペアにまたがる場合はnull
+      strategyAgg.set(key, agg);
+    }
+
+    const strategyIds = [...strategyAgg.keys()].filter((id): id is string => id !== null);
+    const strategyRows =
+      strategyIds.length > 0
+        ? await prisma.strategy.findMany({
+            where: { id: { in: strategyIds } },
+            select: { id: true, name: true, pair: true, isActive: true },
+          })
+        : [];
+    const strategyById = new Map(strategyRows.map((s) => [s.id, s]));
+
+    const byStrategy: PnlStrategyBreakdown[] = [...strategyAgg.entries()]
+      .map(([strategyId, agg]) => {
+        const strategy = strategyId ? strategyById.get(strategyId) : undefined;
+        return {
+          strategyId,
+          strategyName:
+            strategyId === null
+              ? "AI判断・その他"
+              : strategy?.name ?? "(削除済み)",
+          pair: strategy?.pair ?? agg.pair,
+          isActive: strategy?.isActive ?? false,
+          closedCount: agg.count,
+          winCount: agg.winCount,
+          realizedPnl: agg.pnl,
+        };
+      })
+      .sort((a, b) => b.realizedPnl - a.realizedPnl);
+
     const closedPositions: ClosedPositionRecord[] = closedRows
       .slice(-MAX_CLOSED_POSITIONS)
       .reverse()
-      .map((row) => ({ ...toPositionDto(row), closeReason: closeReasonOf(row.trades) }));
+      .map((row) => ({
+        ...toPositionDto(row),
+        closeReason: closeReasonOf(row.trades),
+        totalFeeJpy: row.trades.reduce((sum, t) => sum + t.fee, 0),
+      }));
 
     return {
-      pair: config.targetPair,
-      currentPrice,
+      currentPrices,
       realizedPnl,
       unrealizedPnl,
       totalPnl: realizedPnl + unrealizedPnl,
@@ -149,13 +212,15 @@ export async function pnlRoutes(app: FastifyInstance) {
       avgLoss: lossCount > 0 ? -(grossLoss / lossCount) : null,
       profitFactor: grossLoss > 0 ? grossProfit / grossLoss : null,
       maxDrawdown,
+      totalFeesJpy,
       balanceJpy,
-      balanceBtc,
+      assetBalances,
       equityJpy,
       initialBalanceJpy: INITIAL_JPY_BALANCE,
       equityCurve,
       dailyPnl,
       byReason,
+      byStrategy,
       openPositions,
       closedPositions,
     };

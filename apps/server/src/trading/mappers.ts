@@ -11,6 +11,7 @@ export function toTradeEvent(trade: PrismaTrade): Trade {
     executedAt: trade.executedAt.getTime(),
     aiDecisionId: trade.aiDecisionId,
     reason: trade.reason as Trade["reason"],
+    fee: trade.fee,
   };
 }
 
@@ -25,5 +26,6 @@ export function toPositionEvent(position: PrismaPosition): Position {
     closedAt: position.closedAt ? position.closedAt.getTime() : null,
     closePrice: position.closePrice ?? null,
     pnl: position.pnl ?? null,
+    strategyId: position.strategyId ?? null,
   };
 }

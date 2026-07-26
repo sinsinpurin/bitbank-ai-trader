@@ -32,13 +32,18 @@ const NODE_SPEC: Record<
 
 const NODE_TYPES = Object.keys(NODE_SPEC) as StrategyNodeType[];
 
-const SYSTEM_PROMPT = `あなたはBTC/JPYの1分足で動くトレーディングBotの戦略設計アシスタントです。
+/** ペア表記("btc_jpy" → "BTC/JPY") */
+function pairLabel(pair: string): string {
+  return pair.toUpperCase().replace("_", "/");
+}
+
+const buildSystemPrompt = (pair: string) => `あなたは${pairLabel(pair)}の1分足で動くトレーディングBotの戦略設計アシスタントです。
 ユーザーの自由文の要望を、以下のノードグラフ(ブループリント)へ変換してください。
 
 ## ノード仕様
 値には2種類ある: number(数値シリーズ) / bool(真偽シリーズ)。ポートの型が一致する接続のみ有効。
 
-- price: 入力なし → 出力 out(number)。BTC/JPYの終値(1分足)
+- price: 入力なし → 出力 out(number)。${pairLabel(pair)}の終値(1分足)
 - constant: 入力なし → 出力 out(number)。params.value に固定値(RSIしきい値など)
 - sma / ema: 入力 in(number, 未接続なら終値) → 出力 out(number)。params.period(1以上の整数)
 - rsi: 入力 in(number, 未接続なら終値) → 出力 out(number, 0-100)。params.period(2以上の整数, 通常14)
@@ -243,8 +248,12 @@ const MAX_ATTEMPTS = 2;
  * Claudeにツール強制呼び出しで構造化グラフを出力させ、サーバー側で
  * ポート型・接続・実行時エラーを検証。不合格なら検証エラーをフィードバックして1回だけ再生成させる。
  */
-export async function generateStrategyFromPrompt(prompt: string): Promise<GeneratedStrategy> {
+export async function generateStrategyFromPrompt(
+  prompt: string,
+  pair: string = config.targetPair
+): Promise<GeneratedStrategy> {
   const model = config.ai.strategyModel;
+  const systemPrompt = buildSystemPrompt(pair);
   const messages: Anthropic.MessageParam[] = [
     {
       role: "user",
@@ -260,7 +269,7 @@ export async function generateStrategyFromPrompt(prompt: string): Promise<Genera
     const message = await anthropic.messages.create({
       model,
       max_tokens: config.ai.strategyMaxTokens,
-      system: SYSTEM_PROMPT,
+      system: systemPrompt,
       tools: [STRATEGY_TOOL],
       tool_choice: { type: "tool", name: STRATEGY_TOOL.name },
       messages,

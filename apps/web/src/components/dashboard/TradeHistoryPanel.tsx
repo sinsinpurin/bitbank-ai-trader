@@ -8,10 +8,12 @@ const SIDE_STYLE: Record<Trade["side"], { label: string; color: string }> = {
   sell: { label: "SELL", color: "#FF003C" },
 };
 
-const REASON_LABEL: Record<Trade["reason"], string> = {
-  ai_decision: "AI判断",
-  stop_loss: "損切り",
-  bot_strategy: "BOT戦略",
+const REASON_STYLE: Record<Trade["reason"], { label: string; color: string }> = {
+  ai_decision: { label: "AI判断", color: "#00E5FF" },
+  bot_strategy: { label: "BOT戦略", color: "#00E5FF" },
+  stop_loss: { label: "損切り", color: "#FF8A1E" },
+  take_profit: { label: "利確", color: "#39FF88" },
+  trailing_stop: { label: "トレーリング", color: "#FF8A1E" },
 };
 
 function formatJpy(value: number) {
@@ -63,14 +65,17 @@ export function TradeHistoryPanel({ trades }: { trades: Trade[] }) {
                 >
                   {style.label}
                 </Text>
+                <Text fontFamily="mono" fontSize="10px" color="text.secondary">
+                  {trade.pair.toUpperCase()}
+                </Text>
                 {trade.reason !== "ai_decision" && (
                   <Text
                     fontFamily="heading"
                     fontSize="10px"
                     letterSpacing="0.12em"
-                    color={trade.reason === "stop_loss" ? "signal.orange" : "signal.cyan"}
+                    color={REASON_STYLE[trade.reason].color}
                   >
-                    {REASON_LABEL[trade.reason]}
+                    {REASON_STYLE[trade.reason].label}
                   </Text>
                 )}
               </HStack>
@@ -86,6 +91,11 @@ export function TradeHistoryPanel({ trades }: { trades: Trade[] }) {
                 数量 {trade.amount.toFixed(5)} BTC
               </Text>
             </HStack>
+            {trade.fee !== undefined && (
+              <Text fontSize="xs" color="text.disabled" fontFamily="mono" mt={0.5}>
+                手数料 {formatJpy(trade.fee)}
+              </Text>
+            )}
           </Box>
         );
       })}

@@ -9,6 +9,12 @@ import { prisma } from "../db/prisma";
 import { config } from "../config";
 import { estimateCostJpy } from "../ai/pricing";
 import { isAiDecisionEnabled, setAiDecisionEnabled } from "../ai/decisionLoop";
+import {
+  getCircuitBreakerSettings,
+  getCircuitBreakerStatus,
+  resumeTrading,
+  updateCircuitBreakerSettings,
+} from "../trading/circuitBreaker";
 
 const AI_DECISION_ENABLED_KEY = "aiDecisionEnabled";
 const USAGE_DAYS = 30;
@@ -111,32 +117,76 @@ async function buildUsageSummary(): Promise<AiUsageSummary> {
 }
 
 function currentSettings(): AppSettings {
-  return { aiDecisionEnabled: isAiDecisionEnabled() };
+  const breaker = getCircuitBreakerSettings();
+  return {
+    aiDecisionEnabled: isAiDecisionEnabled(),
+    circuitBreakerEnabled: breaker.enabled,
+    dailyMaxLossJpy: breaker.dailyMaxLossJpy,
+    maxConsecutiveLosses: breaker.maxConsecutiveLosses,
+  };
 }
 
 export async function settingsRoutes(app: FastifyInstance) {
   await loadPersistedSettings();
 
   app.get("/api/settings", async (): Promise<SettingsResponse> => {
-    return { settings: currentSettings(), usage: await buildUsageSummary() };
+    return {
+      settings: currentSettings(),
+      circuitBreaker: getCircuitBreakerStatus(),
+      usage: await buildUsageSummary(),
+    };
   });
 
-  app.put<{ Body: { aiDecisionEnabled?: boolean } }>(
-    "/api/settings",
-    async (request, reply): Promise<AppSettings | void> => {
-      const { aiDecisionEnabled } = request.body ?? {};
-      if (typeof aiDecisionEnabled !== "boolean") {
-        return reply.status(400).send({ error: "aiDecisionEnabled (boolean) は必須です" });
+  app.put<{
+    Body: {
+      aiDecisionEnabled?: boolean;
+      circuitBreakerEnabled?: boolean;
+      dailyMaxLossJpy?: number;
+      maxConsecutiveLosses?: number;
+      /** trueで当日のサーキットブレーカー停止を手動解除する */
+      resumeTrading?: boolean;
+    };
+  }>("/api/settings", async (request, reply) => {
+    const body = request.body ?? {};
+
+    if (
+      body.aiDecisionEnabled === undefined &&
+      body.circuitBreakerEnabled === undefined &&
+      body.dailyMaxLossJpy === undefined &&
+      body.maxConsecutiveLosses === undefined &&
+      body.resumeTrading === undefined
+    ) {
+      return reply.status(400).send({ error: "更新する設定を1つ以上指定してください" });
+    }
+
+    try {
+      if (body.aiDecisionEnabled !== undefined) {
+        if (typeof body.aiDecisionEnabled !== "boolean") {
+          return reply.status(400).send({ error: "aiDecisionEnabled はbooleanで指定してください" });
+        }
+        await prisma.appSetting.upsert({
+          where: { key: AI_DECISION_ENABLED_KEY },
+          update: { value: String(body.aiDecisionEnabled) },
+          create: { key: AI_DECISION_ENABLED_KEY, value: String(body.aiDecisionEnabled) },
+        });
+        setAiDecisionEnabled(body.aiDecisionEnabled);
       }
 
-      await prisma.appSetting.upsert({
-        where: { key: AI_DECISION_ENABLED_KEY },
-        update: { value: String(aiDecisionEnabled) },
-        create: { key: AI_DECISION_ENABLED_KEY, value: String(aiDecisionEnabled) },
+      await updateCircuitBreakerSettings({
+        enabled: body.circuitBreakerEnabled,
+        dailyMaxLossJpy: body.dailyMaxLossJpy,
+        maxConsecutiveLosses: body.maxConsecutiveLosses,
       });
-      setAiDecisionEnabled(aiDecisionEnabled);
 
-      return currentSettings();
+      if (body.resumeTrading === true) {
+        await resumeTrading();
+      }
+    } catch (err) {
+      return reply
+        .status(400)
+        .send({ error: err instanceof Error ? err.message : "設定の更新に失敗しました" });
     }
-  );
+
+    return { settings: currentSettings(), circuitBreaker: getCircuitBreakerStatus() };
+  });
 }

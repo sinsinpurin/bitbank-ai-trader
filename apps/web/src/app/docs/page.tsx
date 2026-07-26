@@ -1,0 +1,505 @@
+"use client";
+
+import { Box, Grid, HStack, Stack, Text, chakra } from "@chakra-ui/react";
+import type { ReactNode } from "react";
+import { AppHeader } from "@/components/ui/AppHeader";
+import { CyberPanel } from "@/components/ui/CyberPanel";
+import {
+  CATEGORY_COLOR,
+  NODE_CATALOG,
+  PORT_COLOR,
+  type NodeDef,
+} from "@/components/strategy/nodeCatalog";
+
+/**
+ * 機能ドキュメント。ノードリファレンスは実際のnodeCatalogから動的生成するため、
+ * ノード追加時もこのページは自動で追従する。
+ */
+
+// ---------------------------------------------------------------------------
+// 小さなドキュメント用パーツ
+// ---------------------------------------------------------------------------
+
+function P({ children }: { children: ReactNode }) {
+  return (
+    <Text fontSize="13px" color="text.primary" lineHeight="1.9">
+      {children}
+    </Text>
+  );
+}
+
+function Muted({ children }: { children: ReactNode }) {
+  return (
+    <Text fontSize="12px" color="text.secondary" lineHeight="1.8">
+      {children}
+    </Text>
+  );
+}
+
+function Mono({ children }: { children: ReactNode }) {
+  return (
+    <Box
+      as="span"
+      fontFamily="mono"
+      fontSize="0.92em"
+      color="signal.cyan"
+      bg="bg.surfaceRaised"
+      px={1.5}
+      py={0.5}
+    >
+      {children}
+    </Box>
+  );
+}
+
+function SubHeading({ children }: { children: ReactNode }) {
+  return (
+    <Text
+      fontFamily="heading"
+      fontSize="12px"
+      fontWeight="700"
+      letterSpacing="0.14em"
+      textTransform="uppercase"
+      color="signal.cyan"
+      mt={2}
+    >
+      <Box as="span" color="signal.red" mr={2}>
+        {"›"}
+      </Box>
+      {children}
+    </Text>
+  );
+}
+
+/** 注意・補足ボックス */
+function Note({ tone = "cyan", children }: { tone?: "cyan" | "orange" | "red"; children: ReactNode }) {
+  const color = tone === "red" ? "#FF003C" : tone === "orange" ? "#FF8A1E" : "#00E5FF";
+  return (
+    <Box borderLeftWidth="3px" borderLeftColor={color} bg="bg.surfaceRaised" px={3} py={2}>
+      <Text fontSize="12px" color="text.secondary" lineHeight="1.8">
+        {children}
+      </Text>
+    </Box>
+  );
+}
+
+/** 手順リスト */
+function Steps({ items }: { items: ReactNode[] }) {
+  return (
+    <Stack gap={1.5}>
+      {items.map((item, i) => (
+        <HStack key={i} align="flex-start" gap={3}>
+          <Text fontFamily="mono" fontSize="11px" color="signal.red" flexShrink={0} mt="2px">
+            {String(i + 1).padStart(2, "0")}
+          </Text>
+          <Text fontSize="13px" color="text.primary" lineHeight="1.7">
+            {item}
+          </Text>
+        </HStack>
+      ))}
+    </Stack>
+  );
+}
+
+/** 2列の定義テーブル */
+function DefTable({ rows }: { rows: { term: ReactNode; def: ReactNode }[] }) {
+  return (
+    <Stack gap={0}>
+      {rows.map((row, i) => (
+        <Grid
+          key={i}
+          templateColumns={{ base: "1fr", md: "220px 1fr" }}
+          gap={{ base: 1, md: 4 }}
+          px={3}
+          py={2}
+          bg={i % 2 === 0 ? "bg.surfaceRaised" : "transparent"}
+        >
+          <Text fontFamily="mono" fontSize="12px" color="signal.cyan">
+            {row.term}
+          </Text>
+          <Text fontSize="12px" color="text.secondary" lineHeight="1.7">
+            {row.def}
+          </Text>
+        </Grid>
+      ))}
+    </Stack>
+  );
+}
+
+/** 戦略グラフの流れを示すミニ図解 */
+function FlowDiagram() {
+  const nodes = [
+    { label: "Price", sub: "終値(1分足)", color: CATEGORY_COLOR.source },
+    { label: "SMA (20)", sub: "インジケーター", color: CATEGORY_COLOR.indicator },
+    { label: "Cross ↑", sub: "条件(上抜け)", color: CATEGORY_COLOR.condition },
+    { label: "Buy", sub: "アクション", color: CATEGORY_COLOR.action },
+  ];
+  return (
+    <HStack gap={0} flexWrap="wrap" rowGap={3}>
+      {nodes.map((node, i) => (
+        <HStack key={node.label} gap={0}>
+          <Box
+            borderWidth="1px"
+            borderColor={node.color}
+            bg="bg.surfaceRaised"
+            px={4}
+            py={2}
+            position="relative"
+          >
+            <Box position="absolute" top="-1px" left="-1px" width="8px" height="8px" borderTop={`2px solid ${node.color}`} borderLeft={`2px solid ${node.color}`} />
+            <Text fontFamily="heading" fontSize="11px" fontWeight="700" letterSpacing="0.1em" color={node.color}>
+              {node.label}
+            </Text>
+            <Text fontFamily="mono" fontSize="9px" color="text.disabled">
+              {node.sub}
+            </Text>
+          </Box>
+          {i < nodes.length - 1 && (
+            <Text fontFamily="mono" color="text.disabled" px={2}>
+              ──▶
+            </Text>
+          )}
+        </HStack>
+      ))}
+    </HStack>
+  );
+}
+
+/** ノードリファレンス(nodeCatalogから動的生成) */
+function NodeReference() {
+  const portList = (ports: NodeDef["inputs"]) =>
+    ports.length === 0
+      ? "─"
+      : ports.map((p) => `${p.id}(${p.kind === "number" ? "数値" : "条件"})`).join(", ");
+
+  return (
+    <Stack gap={2}>
+      <HStack gap={4} mb={1}>
+        <HStack gap={1.5}>
+          <Box width="8px" height="8px" bg={PORT_COLOR.number} />
+          <Text fontFamily="mono" fontSize="10px" color="text.secondary">数値シリーズ</Text>
+        </HStack>
+        <HStack gap={1.5}>
+          <Box width="8px" height="8px" bg={PORT_COLOR.bool} />
+          <Text fontFamily="mono" fontSize="10px" color="text.secondary">条件(真偽)シリーズ</Text>
+        </HStack>
+        <Text fontFamily="mono" fontSize="10px" color="text.disabled">
+          ※同じ色のポート同士のみ接続できます
+        </Text>
+      </HStack>
+      {NODE_CATALOG.map((def) => (
+        <Grid
+          key={def.type}
+          templateColumns={{ base: "1fr", md: "110px 1fr 220px" }}
+          gap={{ base: 1, md: 4 }}
+          px={3}
+          py={2}
+          bg="bg.surfaceRaised"
+          borderLeftWidth="3px"
+          borderLeftColor={def.type === "sell" ? "#FF003C" : CATEGORY_COLOR[def.category]}
+        >
+          <Text fontFamily="heading" fontSize="12px" fontWeight="700" letterSpacing="0.08em" color="text.primary">
+            {def.label}
+          </Text>
+          <Text fontSize="12px" color="text.secondary" lineHeight="1.6">
+            {def.description}
+            {def.paramFields.length > 0 && (
+              <Box as="span" color="text.disabled">
+                {" "}
+                / 設定: {def.paramFields.map((f) => f.label).join("・")}
+              </Box>
+            )}
+          </Text>
+          <Text fontFamily="mono" fontSize="10px" color="text.disabled">
+            IN: {portList(def.inputs)} → OUT: {portList(def.outputs)}
+          </Text>
+        </Grid>
+      ))}
+    </Stack>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ページ本体
+// ---------------------------------------------------------------------------
+
+const TOC = [
+  { id: "overview", label: "概要・はじめかた" },
+  { id: "dashboard", label: "Dashboard(ダッシュボード)" },
+  { id: "strategies", label: "Bot Blueprint(戦略エディタ)" },
+  { id: "risk", label: "リスク管理・サーキットブレーカー" },
+  { id: "pnl", label: "P&L Report(損益)" },
+  { id: "settings", label: "Settings(設定・AIコスト)" },
+  { id: "env", label: "環境変数リファレンス" },
+];
+
+export default function DocsPage() {
+  return (
+    <Box minH="100vh">
+      <AppHeader />
+
+      <Box px={{ base: 4, md: 10 }} py={8} maxW="1100px" mx="auto">
+        <Stack gap={6}>
+          <CyberPanel title="Documentation" code="00 / INDEX" accent="red" delay={0}>
+            <Stack gap={3}>
+              <P>
+                Bitbank AI Trader は、bitbankの公開データを使った
+                <Box as="span" color="signal.yellow" fontWeight="700">ペーパートレード(仮想売買)</Box>
+                システムです。実際の注文は一切行いません。仮想残高¥1,000,000からスタートし、
+                「AIによる売買判断」と「自作Bot戦略の自動実行」の2系統で取引をシミュレートします。
+              </P>
+              <HStack gap={2} flexWrap="wrap">
+                {TOC.map((item) => (
+                  <chakra.a
+                    key={item.id}
+                    href={`#${item.id}`}
+                    borderWidth="1px"
+                    borderColor="border.gridCyan"
+                    px={3}
+                    py={1.5}
+                    fontFamily="heading"
+                    fontSize="10px"
+                    fontWeight="600"
+                    letterSpacing="0.1em"
+                    color="signal.cyan"
+                    _hover={{ boxShadow: "glowCyanSm" }}
+                  >
+                    {item.label}
+                  </chakra.a>
+                ))}
+              </HStack>
+            </Stack>
+          </CyberPanel>
+
+          {/* ---------------- 概要 ---------------- */}
+          <Box id="overview">
+            <CyberPanel title="概要・はじめかた" code="01 / START" accent="cyan" delay={0.05}>
+              <Stack gap={4}>
+                <SubHeading>起動</SubHeading>
+                <Steps
+                  items={[
+                    <>ターミナル1: <Mono>npm run dev:server</Mono>(APIサーバー、port 4000)</>,
+                    <>ターミナル2: <Mono>npm run dev:web</Mono>(この画面、port 3000)</>,
+                    <>初回は <Mono>apps/server/.env</Mono> に <Mono>ANTHROPIC_API_KEY</Mono> を設定(AI機能に必要)</>,
+                  ]}
+                />
+                <SubHeading>2つの取引系統</SubHeading>
+                <DefTable
+                  rows={[
+                    {
+                      term: "AI売買判断ループ",
+                      def: "Claudeが相場スナップショットを定期分析してbuy/sell/holdを判断します。メインペア(TARGET_PAIRSの先頭)のみが対象で、トークン費用がかかるためSettingsでON/OFFできます。",
+                    },
+                    {
+                      term: "Bot戦略",
+                      def: "ノードエディタで組んだ戦略グラフを1分足で常時評価し、条件成立の瞬間に自動発注します。Claudeを呼ばないため費用ゼロで、複数ペア・複数戦略を同時稼働できます。",
+                    },
+                  ]}
+                />
+                <Note>
+                  どちらの系統も、損切り・利確・サーキットブレーカーなどのリスク管理(後述)が共通で適用されます。
+                </Note>
+              </Stack>
+            </CyberPanel>
+          </Box>
+
+          {/* ---------------- Dashboard ---------------- */}
+          <Box id="dashboard">
+            <CyberPanel title="Dashboard(ダッシュボード)" code="02 / VIEW" accent="cyan" delay={0.05}>
+              <Stack gap={4}>
+                <P>
+                  リアルタイムの相場と取引状況を一望するページです。上部の
+                  <Box as="span" color="signal.cyan">ペアタブ</Box>
+                  (BTC/JPY・ETH/JPYなど、ペアが2つ以上のとき表示)で表示対象を切り替えられます。
+                </P>
+                <DefTable
+                  rows={[
+                    { term: "Price Chart", def: "選択ペアの1分足ローソク足。サーバー起動時にbitbankから直近3日分(CANDLE_SEED_DAYSで変更可)のOHLC履歴を自動取得するため、起動直後からチャート・指標・戦略評価がフルで使えます。以降はWebSocketでリアルタイム更新。" },
+                    { term: "System Status", def: "配信接続状態と、本日のAIトークン使用量・日次予算の消化状況。" },
+                    { term: "AI Decision Log", def: "Claudeの売買判断履歴。判断(BUY/SELL/HOLD)・確信度・理由が並びます。" },
+                    { term: "Positions / P&L", def: "選択ペアの保有中ポジションと含み損益(緑=利益/赤=損失)。" },
+                    { term: "Signal Monitor", def: "「RSI(14) < 30」「価格がSMA(20)を上抜け」のような監視条件を自由に追加・編集・削除できる監視盤。現在値と成立◯/✕が10秒ごとに更新されます(発注はしません)。左辺=価格/指標、右辺=固定値/指標、演算子は大小比較とクロスから選択。" },
+                    { term: "Bot Signal Feed", def: "Bot戦略の発火履歴(約定・見送り)。ペア・約定有無・戦略でフィルタできます。履歴はDBに保存されるためリロード後も残ります。" },
+                    { term: "チャートマーカー", def: "ローソク足上に約定(▲買い/▼売り)と見送りシグナル(●)を表示。チャート上部のMARKERSトグルでON/OFFできます。" },
+                    { term: "Trade History", def: "全ペアの約定履歴。発生理由(AI判断/BOT戦略/損切り/利確/トレーリング)のラベル付き。" },
+                  ]}
+                />
+              </Stack>
+            </CyberPanel>
+          </Box>
+
+          {/* ---------------- Strategies ---------------- */}
+          <Box id="strategies">
+            <CyberPanel title="Bot Blueprint(戦略エディタ)" code="03 / BOT" accent="cyan" delay={0.05}>
+              <Stack gap={4}>
+                <P>
+                  ブループリント型のノードエディタで売買ルールを組み立てるページです。
+                  ノードを線でつなぐだけで「SMAゴールデンクロスで買う」のような戦略が作れます。
+                </P>
+
+                <SubHeading>戦略グラフの基本形</SubHeading>
+                <FlowDiagram />
+                <Muted>
+                  データ源(Price/Constant)→ インジケーター(SMA/EMA/RSI)→ 条件(Compare/Cross)→
+                  アクション(Buy/Sell)の順につなぎます。条件が「不成立→成立」に変わった瞬間だけ発火し、
+                  発火後60秒はクールダウンで再発火しません。
+                </Muted>
+
+                <SubHeading>使い方</SubHeading>
+                <Steps
+                  items={[
+                    "左のNode Paletteからクリックまたはドラッグ&ドロップでノードを配置",
+                    "ポート(◈)同士をドラッグで接続(同じ色のポートのみ接続可能)/ Backspaceで選択要素を削除",
+                    <>戦略名とペアを設定し、必要ならリスク設定(後述)を入力して <Mono>Save</Mono></>,
+                    <>保存済み一覧(Deployed Strategies)で <Mono>Deploy</Mono> を押すと稼働開始。<Mono>Stop</Mono> で停止</>,
+                  ]}
+                />
+                <Note>
+                  キャンバス上の各ノードには、サーバーが実際に見ているのと同じ1分足データでの
+                  現在値・条件の◯/✕がライブ表示されます(10秒ごと更新)。Deployする前に
+                  「いま条件がどう評価されているか」を確認できます。
+                </Note>
+
+                <SubHeading>AI Strategy Gen(AI自動生成)</SubHeading>
+                <P>
+                  右カラムの「AI Strategy Gen」に日本語で要望を書くと(例:
+                  「RSIが30を下回ったら買い、70を超えたら売り」)、Claudeが戦略グラフを設計して
+                  キャンバスに展開します。生成物はサーバー側で接続・型・実行時エラーを検証済みですが、
+                  <Box as="span" color="signal.yellow">保存はされません</Box>
+                  — 内容を確認・調整してからSaveしてください。生成1回あたり数円のAPIコストがかかります。
+                </P>
+
+                <SubHeading>ノードリファレンス</SubHeading>
+                <NodeReference />
+              </Stack>
+            </CyberPanel>
+          </Box>
+
+          {/* ---------------- リスク管理 ---------------- */}
+          <Box id="risk">
+            <CyberPanel title="リスク管理・サーキットブレーカー" code="04 / SAFE" accent="red" delay={0.05}>
+              <Stack gap={4}>
+                <SubHeading>戦略ごとのリスク設定(エディタのRisk Settings)</SubHeading>
+                <DefTable
+                  rows={[
+                    { term: "投入額 (円/回)", def: "この戦略が1回の買いで使う金額。空欄なら既定¥30,000。" },
+                    { term: "最大ポジション数", def: "この戦略が同時に持てる未決済ポジション数。空欄なら既定3(ペア全体で共有)。" },
+                    { term: "損切り %", def: "建値からこの%下落したら自動決済。空欄なら既定3%。" },
+                    { term: "利確 %", def: "建値からこの%上昇したら自動決済。空欄なら利確なし(売り条件でのみ手仕舞い)。" },
+                    { term: "トレーリング %", def: "建玉後の最高値からこの%下落したら自動決済。利益を伸ばしつつ確定させたい戦略向け。空欄なら無効。" },
+                  ]}
+                />
+                <Note tone="orange">
+                  出口条件(損切り/利確/トレーリング)は建玉した瞬間の設定がポジションに記録されます。
+                  後から戦略設定を変えても、すでに持っているポジションには影響しません。
+                  判定の優先順は 利確 → トレーリング → 損切り です。
+                </Note>
+
+                <SubHeading>サーキットブレーカー(Settingsで設定)</SubHeading>
+                <P>
+                  相場急変や暴走した戦略から仮想資産を守る安全装置です。2段構えになっています:
+                </P>
+                <DefTable
+                  rows={[
+                    {
+                      term: "日次最大損失",
+                      def: "本日(JST)の実現損失が設定額(既定¥50,000)を超えると、AI判断・全Bot戦略の新規買いを停止します。決済・損切り・利確は動き続けます。日付が変わると自動解除、Settingsから手動解除も可能。",
+                    },
+                    {
+                      term: "連敗自動停止",
+                      def: "ある戦略が設定回数(既定5回)連続で負けると、その戦略だけ自動でStandbyになります。P&Lの戦略別成績で気づけます。",
+                    },
+                  ]}
+                />
+                <Note tone="red">
+                  発動中はSettingsの安全装置パネルに赤い警告が表示されます。発動状態はサーバーを
+                  再起動しても当日中は維持されます。
+                </Note>
+              </Stack>
+            </CyberPanel>
+          </Box>
+
+          {/* ---------------- P&L ---------------- */}
+          <Box id="pnl">
+            <CyberPanel title="P&L Report(損益)" code="05 / PNL" accent="cyan" delay={0.05}>
+              <Stack gap={4}>
+                <P>取引成績を分析するページです。全ペア・全系統の損益を合算して表示します。</P>
+                <DefTable
+                  rows={[
+                    { term: "総損益", def: "実現損益(決済済み)+含み損益(保有中をペア別の現在値で評価)。実現損益は手数料(taker 0.12%相当)とスリッページを控除したネット値で、実運用に近い数字になっています。含み損益は手数料控除前。" },
+                    { term: "勝率", def: "決済済みポジションのうち利益で終えた割合。" },
+                    { term: "Profit Factor", def: "総利益÷総損失。1.0超なら通算プラス。1.5以上が一つの目安。" },
+                    { term: "最大DD", def: "最大ドローダウン。累積損益カーブの山から谷への最大下落幅。リスクの大きさを示します。" },
+                    { term: "Equity Curve", def: "累積実現損益の推移。ゼロ基準線より上(緑)が利益圏、下(赤)が損失圏。" },
+                    { term: "Daily P&L", def: "JST日別の実現損益バー。" },
+                    { term: "経路別内訳", def: "AI判断/BOT戦略/自動利確/トレーリング/自動損切りごとの損益と勝率。" },
+                    { term: "戦略別成績", def: "どの戦略がいくら稼いだか。決済数・勝率・実現損益・稼働状態。負けている戦略を止める判断はここで。" },
+                  ]}
+                />
+                <Note>
+                  戦略別成績は戦略IDの記録を開始した2026-07-07以降の決済分から集計されます。
+                  それ以前の決済は「AI判断・その他」枠に含まれます。
+                </Note>
+              </Stack>
+            </CyberPanel>
+          </Box>
+
+          {/* ---------------- Settings ---------------- */}
+          <Box id="settings">
+            <CyberPanel title="Settings(設定・AIコスト)" code="06 / CTRL" accent="cyan" delay={0.05}>
+              <Stack gap={4}>
+                <DefTable
+                  rows={[
+                    {
+                      term: "AI Decision Loop",
+                      def: "Claudeによる定期売買判断のON/OFF。OFFにするとトークン消費が止まります(Bot戦略・損切り等は動き続けます)。設定は保存され、再起動後も維持されます。日次予算(既定¥100)を超えた日は自動でスキップされます。",
+                    },
+                    {
+                      term: "Circuit Breaker",
+                      def: "安全装置の有効/無効と、日次最大損失・連敗数のしきい値設定。発動中はここに警告と手動解除ボタンが出ます。",
+                    },
+                    {
+                      term: "AI Usage",
+                      def: "AIトークン使用量と推定コスト(円)のサマリと日別テーブル。売買判断(Haiku)と戦略生成(Opus)を合算し、それぞれのモデル単価で計算します。",
+                    },
+                  ]}
+                />
+              </Stack>
+            </CyberPanel>
+          </Box>
+
+          {/* ---------------- 環境変数 ---------------- */}
+          <Box id="env">
+            <CyberPanel title="環境変数リファレンス" code="07 / ENV" accent="cyan" delay={0.05}>
+              <Stack gap={3}>
+                <Muted>
+                  <Mono>apps/server/.env</Mono> で設定します。変更後はサーバーの再起動が必要です。
+                </Muted>
+                <DefTable
+                  rows={[
+                    { term: "TARGET_PAIRS", def: "取引対象ペア(カンマ区切り)。例: btc_jpy,eth_jpy。先頭がメインペア(AI判断ループの対象)。既定: btc_jpy" },
+                    { term: "ANTHROPIC_API_KEY", def: "Claude APIキー。AI売買判断・AI戦略生成に必要。" },
+                    { term: "AI_MODEL", def: "売買判断用モデル。既定: claude-haiku-4-5(高頻度呼び出しのため低コストモデル)" },
+                    { term: "AI_STRATEGY_MODEL", def: "戦略生成用モデル。既定: claude-opus-4-8(単発・高品質重視)" },
+                    { term: "AI_DAILY_BUDGET_JPY", def: "AI判断ループの日次コスト上限(円)。超過した日は呼び出し停止。既定: 100" },
+                    { term: "AI_MAX_POSITION_JPY", def: "1回の買い投入額の既定値(円)。戦略別設定が優先。既定: 30000" },
+                    { term: "AI_MAX_OPEN_POSITIONS", def: "同時保有ポジション数の既定上限。既定: 3" },
+                    { term: "AI_STOP_LOSS_PCT", def: "自動損切り率の既定値(%)。戦略別設定が優先。既定: 3" },
+                    { term: "BOT_COOLDOWN_MS", def: "同一戦略の連続発火を防ぐ最短間隔(ms)。既定: 60000" },
+                    { term: "CANDLE_SEED_DAYS", def: "起動時にbitbankから取得する1分足の日数(1〜7)。既定: 3" },
+                    { term: "TRADE_FEE_PCT", def: "ペーパートレードに反映する取引手数料(%)。bitbank現物taker相当。既定: 0.12" },
+                    { term: "TRADE_SLIPPAGE_PCT", def: "成行想定のスリッページ(%)。買いは高く・売りは安く約定させる。既定: 0.02" },
+                  ]}
+                />
+              </Stack>
+            </CyberPanel>
+          </Box>
+
+          <Text fontFamily="mono" fontSize="10px" color="text.disabled" textAlign="center" pb={4}>
+            // このドキュメントのノードリファレンスは実装(nodeCatalog)から自動生成されています
+          </Text>
+        </Stack>
+      </Box>
+    </Box>
+  );
+}

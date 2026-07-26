@@ -7,6 +7,37 @@ export type OrderSide = "buy" | "sell";
 
 export type AiAction = "buy" | "sell" | "hold";
 
+/** チャートの時間足。分足はサーバーの1分足バッファを集計して生成する */
+export type CandleTimeframe = "1min" | "5min" | "15min" | "30min" | "1hour" | "4hour" | "1day";
+
+export interface CandleTimeframeOption {
+  value: CandleTimeframe;
+  label: string;
+  /** 1本あたりの分数(集計バケットサイズ) */
+  minutes: number;
+}
+
+/** UIの時間足セレクタ・サーバー集計の両方が参照する定義(表示順) */
+export const CANDLE_TIMEFRAMES: CandleTimeframeOption[] = [
+  { value: "1min", label: "1分", minutes: 1 },
+  { value: "5min", label: "5分", minutes: 5 },
+  { value: "15min", label: "15分", minutes: 15 },
+  { value: "30min", label: "30分", minutes: 30 },
+  { value: "1hour", label: "1時間", minutes: 60 },
+  { value: "4hour", label: "4時間", minutes: 240 },
+  { value: "1day", label: "1日", minutes: 1440 },
+];
+
+export const DEFAULT_CANDLE_TIMEFRAME: CandleTimeframe = "1min";
+
+export function minutesOfTimeframe(timeframe: CandleTimeframe): number {
+  return CANDLE_TIMEFRAMES.find((t) => t.value === timeframe)?.minutes ?? 1;
+}
+
+export function isCandleTimeframe(value: string): value is CandleTimeframe {
+  return CANDLE_TIMEFRAMES.some((t) => t.value === value);
+}
+
 /** bitbank Public Stream の ticker_{pair} イベントを正規化したもの */
 export interface Ticker {
   pair: Pair;
@@ -42,10 +73,17 @@ export interface Position {
   closedAt: number | null;
   closePrice: number | null;
   pnl: number | null;
+  /** このポジションを建てたBot戦略ID(AI判断の場合はnull) */
+  strategyId?: string | null;
 }
 
-/** 約定の発生理由。AIの売買判断・リスク管理の自動損切り・Bot戦略のいずれか */
-export type TradeReason = "ai_decision" | "stop_loss" | "bot_strategy";
+/** 約定の発生理由。AIの売買判断・Bot戦略・リスク管理の自動決済(損切り/利確/トレーリング) */
+export type TradeReason =
+  | "ai_decision"
+  | "stop_loss"
+  | "bot_strategy"
+  | "take_profit"
+  | "trailing_stop";
 
 /** ペーパートレードにおける仮想約定履歴 */
 export interface Trade {
@@ -57,6 +95,8 @@ export interface Trade {
   executedAt: number;
   aiDecisionId: string | null;
   reason: TradeReason;
+  /** この約定で支払った手数料(円、シミュレーション値) */
+  fee?: number;
 }
 
 /** Claudeによる売買判断結果 */
@@ -135,9 +175,25 @@ export interface StrategyGraph {
   edges: StrategyEdge[];
 }
 
-export interface Strategy {
+/** 戦略ごとのリスク設定。nullはサーバーのグローバル設定にフォールバック */
+export interface StrategyRiskSettings {
+  /** 1回の買いで投入する金額(円) */
+  positionSizeJpy: number | null;
+  /** この戦略が同時に持てる未決済ポジション数 */
+  maxOpenPositions: number | null;
+  /** 損切り率(%) */
+  stopLossPct: number | null;
+  /** 利確率(%)。建値からこの%上昇したら自動決済 */
+  takeProfitPct: number | null;
+  /** トレーリングストップ幅(%)。建玉後の最高値からこの%下落したら自動決済 */
+  trailingStopPct: number | null;
+}
+
+export interface Strategy extends StrategyRiskSettings {
   id: string;
   name: string;
+  /** 対象ペア(例: "btc_jpy")。このペアの1分足でグラフが評価される */
+  pair: Pair;
   description: string;
   graph: StrategyGraph;
   isActive: boolean;
@@ -179,6 +235,22 @@ export interface BotSignal {
 export interface AppSettings {
   /** AI売買判断ループ(Claude定期呼び出し)を有効にするか */
   aiDecisionEnabled: boolean;
+  /** サーキットブレーカー(日次最大損失・連敗自動停止)を有効にするか */
+  circuitBreakerEnabled: boolean;
+  /** 本日(JST)の実現損失がこの額を超えたら全Botの新規買いを停止する(円) */
+  dailyMaxLossJpy: number;
+  /** 戦略がこの回数連続で負けたら自動でStandbyにする */
+  maxConsecutiveLosses: number;
+}
+
+/** サーキットブレーカーの発動状態 */
+export interface CircuitBreakerStatus {
+  /** 本日の新規買いが停止中か */
+  halted: boolean;
+  /** 停止理由(未発動ならnull) */
+  reason: string | null;
+  /** 発動日時(エポックms、未発動ならnull) */
+  haltedAt: number | null;
 }
 
 /** JST日別のAIトークン使用量(売買判断+戦略生成の合算) */
@@ -213,6 +285,7 @@ export interface AiUsageSummary {
 
 export interface SettingsResponse {
   settings: AppSettings;
+  circuitBreaker: CircuitBreakerStatus;
   usage: AiUsageSummary;
 }
 
@@ -244,12 +317,34 @@ export interface PnlReasonBreakdown {
 /** 決済済みポジション+決済理由 */
 export interface ClosedPositionRecord extends Position {
   closeReason: TradeReason | null;
+  /** 建玉+決済の合計手数料(円、シミュレーション値)。pnlは控除済み */
+  totalFeeJpy: number;
 }
 
-/** GET /api/pnl が返す損益サマリ */
+/** 戦略ごとの実現損益サマリ */
+export interface PnlStrategyBreakdown {
+  /** 戦略ID。AI判断など戦略に紐づかないものはnull */
+  strategyId: string | null;
+  /** 戦略名(削除済みは"(削除済み)"、null枠は"AI判断・その他") */
+  strategyName: string;
+  pair: Pair | null;
+  isActive: boolean;
+  closedCount: number;
+  winCount: number;
+  realizedPnl: number;
+}
+
+/** GET /api/pairs が返す取引対象ペア情報 */
+export interface PairsInfo {
+  pairs: Pair[];
+  /** メインペア。AI売買判断ループの対象 */
+  primaryPair: Pair;
+}
+
+/** GET /api/pnl が返す損益サマリ(全ペア合算) */
 export interface PnlSummary {
-  pair: Pair;
-  currentPrice: number | null;
+  /** ペアごとの最新価格(1分足終値ベース)。履歴が無いペアは含まれない */
+  currentPrices: Record<Pair, number>;
   /** 決済済みポジションの損益合計 */
   realizedPnl: number;
   /** 未決済ポジションの現在値評価損益(currentPrice不明時は0) */
@@ -265,17 +360,54 @@ export interface PnlSummary {
   profitFactor: number | null;
   /** 累積実現損益カーブ上の最大ドローダウン(正の値) */
   maxDrawdown: number;
+  /** これまでに支払った手数料の合計(円、シミュレーション値)。realizedPnlは控除済み */
+  totalFeesJpy: number;
   balanceJpy: number;
-  balanceBtc: number;
+  /** JPY以外の仮想残高(通貨コード→数量)。例: { btc: 0.003, eth: 0.1 } */
+  assetBalances: Record<string, number>;
   /** JPY残高 + BTC残高の現在値評価 */
   equityJpy: number;
   initialBalanceJpy: number;
   equityCurve: PnlCurvePoint[];
   dailyPnl: PnlDailyPoint[];
   byReason: PnlReasonBreakdown[];
+  /** 戦略別の実現損益(損益の大きい順) */
+  byStrategy: PnlStrategyBreakdown[];
   openPositions: Position[];
   /** 直近の決済済みポジション(新しい順) */
   closedPositions: ClosedPositionRecord[];
+}
+
+// ---------------------------------------------------------------------------
+// カスタムシグナルモニター(ダッシュボードの監視条件)
+// ---------------------------------------------------------------------------
+
+/** シグナル条件のオペランド。constantは固定値、それ以外は1分足終値ベースの指標 */
+export interface SignalOperand {
+  type: "price" | "sma" | "ema" | "rsi" | "constant";
+  /** sma/ema/rsi の期間 */
+  period?: number;
+  /** constant の値 */
+  value?: number;
+}
+
+export type SignalOp = CompareOp | CrossOp;
+
+/** 監視条件: left op right(例: rsi(14) lt 30) */
+export interface SignalWatchConfig {
+  left: SignalOperand;
+  op: SignalOp;
+  right: SignalOperand;
+}
+
+export interface SignalWatch {
+  id: string;
+  /** 表示名(空なら条件から自動生成) */
+  name: string;
+  pair: Pair;
+  config: SignalWatchConfig;
+  createdAt: number;
+  updatedAt: number;
 }
 
 /** WebSocketでサーバーからフロントへ配信するメッセージの共通形式 */

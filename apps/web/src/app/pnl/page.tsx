@@ -10,6 +10,7 @@ import { EquityCurveChart } from "@/components/pnl/EquityCurveChart";
 import { DailyPnlChart } from "@/components/pnl/DailyPnlChart";
 import { ReasonBreakdownPanel } from "@/components/pnl/ReasonBreakdownPanel";
 import { ClosedPositionsTable } from "@/components/pnl/ClosedPositionsTable";
+import { StrategyBreakdownTable } from "@/components/pnl/StrategyBreakdownTable";
 import { fetchPnlSummary } from "@/lib/pnlApi";
 
 const REFRESH_INTERVAL_MS = 15_000;
@@ -73,7 +74,13 @@ export default function PnlPage() {
             </GridItem>
 
             <GridItem colSpan={{ base: 1, xl: 2 }}>
-              <CyberPanel title="Closed Positions / 決済履歴" code="05 / HIST" accent="cyan" delay={0.2}>
+              <CyberPanel title="Strategy P&L / 戦略別成績" code="05 / STRAT" accent="red" delay={0.2}>
+                <StrategyBreakdownTable rows={summary.byStrategy} />
+              </CyberPanel>
+            </GridItem>
+
+            <GridItem colSpan={{ base: 1, xl: 2 }}>
+              <CyberPanel title="Closed Positions / 決済履歴" code="06 / HIST" accent="cyan" delay={0.25}>
                 <ClosedPositionsTable positions={summary.closedPositions} />
               </CyberPanel>
             </GridItem>

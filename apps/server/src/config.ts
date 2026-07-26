@@ -29,9 +29,28 @@ function resolveAiModel(): string {
   return model;
 }
 
+/** 取引対象ペア。TARGET_PAIRS(カンマ区切り)優先、無ければ旧TARGET_PAIR、既定はbtc_jpy */
+function resolveTargetPairs(): string[] {
+  const raw = process.env.TARGET_PAIRS ?? process.env.TARGET_PAIR ?? "btc_jpy";
+  const pairs = [...new Set(raw.split(",").map((p) => p.trim().toLowerCase()).filter(Boolean))];
+  for (const pair of pairs) {
+    if (!/^[a-z0-9]+_jpy$/.test(pair)) {
+      console.warn(
+        `[config] ペア "${pair}" はJPY建てではありません。ペーパートレードの損益計算はJPY建てペアのみ対応しています`
+      );
+    }
+  }
+  return pairs.length > 0 ? pairs : ["btc_jpy"];
+}
+
+const targetPairs = resolveTargetPairs();
+
 export const config = {
   port: Number(process.env.PORT ?? 4000),
-  targetPair: process.env.TARGET_PAIR ?? "btc_jpy",
+  /** 全取引対象ペア */
+  targetPairs,
+  /** メインペア(先頭)。AI売買判断ループはこのペアのみを対象にする */
+  targetPair: targetPairs[0],
   bitbank: {
     apiKey: process.env.BITBANK_API_KEY ?? "",
     apiSecret: process.env.BITBANK_API_SECRET ?? "",
@@ -59,9 +78,20 @@ export const config = {
     // 円換算用の概算レート(正確な現在レートではなく見積もり用の概算値)
     usdJpyRate: Number(process.env.AI_USD_JPY_RATE ?? 155),
   },
+  candles: {
+    // 起動時にbitbank公開RESTから取得する1分足の日数(1〜7)。
+    // チャート表示と指標のウォームアップを起動直後から使えるようにする
+    seedDays: Math.min(7, Math.max(1, Number(process.env.CANDLE_SEED_DAYS ?? 3))),
+  },
   bot: {
     // 同一戦略が連続発火するのを防ぐ最短間隔
     cooldownMs: Number(process.env.BOT_COOLDOWN_MS ?? 60_000),
+  },
+  fees: {
+    // ペーパートレードに反映する取引手数料(%)。bitbank現物のtaker手数料は0.12%
+    takerFeePct: Number(process.env.TRADE_FEE_PCT ?? 0.12),
+    // 成行想定のスリッページ(%)。買いは高く、売りは安く約定する
+    slippagePct: Number(process.env.TRADE_SLIPPAGE_PCT ?? 0.02),
   },
   risk: {
     // 1ポジションあたりの上限金額(円)。この金額をもとに購入数量を算出する

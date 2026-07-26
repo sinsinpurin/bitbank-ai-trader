@@ -2,16 +2,20 @@ import { prisma } from "../db/prisma";
 import { broadcast } from "../ws/relay";
 import { config } from "../config";
 import { closePosition } from "./paperTradingEngine";
-import type { Position, Trade } from "@bitbank-ai-trader/shared";
+import { toPositionEvent, toTradeEvent } from "./mappers";
+import type { TradeReason } from "@bitbank-ai-trader/shared";
 
 // 決済処理が完了するまでの間、同一ポジションを二重に決済しないためのガード
 const closingInFlight = new Set<string>();
 
 /**
- * 保有中の全ポジションを現在値で評価し、含み損が stopLossPct を超えていれば
- * AIの判断を待たずに成行決済する。Claude APIは呼ばないためトークン課金は発生しない。
+ * 保有中の全ポジションを現在値で評価し、出口条件に達していれば自動決済する。
+ * 優先順: 利確(take_profit) → トレーリングストップ(trailing_stop) → 損切り(stop_loss)。
+ * 損切り率はポジションに記録された戦略別設定を優先し、無ければグローバル設定を使う。
+ * 利確・トレーリングはポジションに設定がある場合のみ有効。
+ * Claude APIは呼ばないためトークン課金は発生しない。
  */
-export async function checkStopLosses(pair: string, currentPrice: number) {
+export async function checkExits(pair: string, currentPrice: number) {
   const openPositions = await prisma.position.findMany({
     where: { pair, side: "buy", closedAt: null },
   });
@@ -19,43 +23,48 @@ export async function checkStopLosses(pair: string, currentPrice: number) {
   for (const position of openPositions) {
     if (closingInFlight.has(position.id)) continue;
 
-    const lossPct = ((currentPrice - position.entryPrice) / position.entryPrice) * 100;
-    if (lossPct > -config.risk.stopLossPct) continue;
+    // トレーリング用の最高値を更新(上昇時のみ書き込み)
+    let highestPrice = position.highestPrice ?? position.entryPrice;
+    if (currentPrice > highestPrice) {
+      highestPrice = currentPrice;
+      await prisma.position
+        .update({ where: { id: position.id }, data: { highestPrice } })
+        .catch(() => {});
+    }
+
+    const stopLossPct = position.stopLossPct ?? config.risk.stopLossPct;
+    const takeProfitPct = position.takeProfitPct;
+    const trailingStopPct = position.trailingStopPct;
+
+    let reason: TradeReason | null = null;
+    if (
+      takeProfitPct != null &&
+      currentPrice >= position.entryPrice * (1 + takeProfitPct / 100)
+    ) {
+      reason = "take_profit";
+    } else if (
+      trailingStopPct != null &&
+      currentPrice <= highestPrice * (1 - trailingStopPct / 100)
+    ) {
+      reason = "trailing_stop";
+    } else if (currentPrice <= position.entryPrice * (1 - stopLossPct / 100)) {
+      reason = "stop_loss";
+    }
+
+    if (!reason) continue;
 
     closingInFlight.add(position.id);
     try {
-      const result = await closePosition(position, currentPrice, "stop_loss");
-
+      const result = await closePosition(position, currentPrice, reason);
+      const changePct =
+        ((currentPrice - position.entryPrice) / position.entryPrice) * 100;
       console.info(
-        `[riskManager] 損切り執行: position=${position.id} entry=${position.entryPrice} current=${currentPrice} (${lossPct.toFixed(2)}%)`
+        `[riskManager] ${reason} 執行: position=${position.id} entry=${position.entryPrice} current=${currentPrice} (${changePct.toFixed(2)}%)`
       );
-
-      const tradeEvent: Trade = {
-        id: result.trade.id,
-        pair: result.trade.pair,
-        side: result.trade.side as Trade["side"],
-        price: result.trade.price,
-        amount: result.trade.amount,
-        executedAt: result.trade.executedAt.getTime(),
-        aiDecisionId: result.trade.aiDecisionId,
-        reason: result.trade.reason as Trade["reason"],
-      };
-      broadcast({ type: "trade", payload: tradeEvent });
-
-      const positionEvent: Position = {
-        id: result.position.id,
-        pair: result.position.pair,
-        side: result.position.side as Position["side"],
-        entryPrice: result.position.entryPrice,
-        amount: result.position.amount,
-        openedAt: result.position.openedAt.getTime(),
-        closedAt: result.position.closedAt ? result.position.closedAt.getTime() : null,
-        closePrice: result.position.closePrice ?? null,
-        pnl: result.position.pnl ?? null,
-      };
-      broadcast({ type: "position_update", payload: positionEvent });
+      broadcast({ type: "trade", payload: toTradeEvent(result.trade) });
+      broadcast({ type: "position_update", payload: toPositionEvent(result.position) });
     } catch (err) {
-      console.error("[riskManager] 損切り執行中にエラーが発生しました", err);
+      console.error(`[riskManager] ${reason} 執行中にエラーが発生しました`, err);
     } finally {
       closingInFlight.delete(position.id);
     }
