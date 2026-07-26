@@ -226,6 +226,7 @@ function NodeReference() {
 const TOC = [
   { id: "overview", label: "概要・はじめかた" },
   { id: "dashboard", label: "Dashboard(ダッシュボード)" },
+  { id: "chart", label: "Price Chart(チャート)" },
   { id: "strategies", label: "Bot Blueprint(戦略エディタ)" },
   { id: "risk", label: "リスク管理・サーキットブレーカー" },
   { id: "pnl", label: "P&L Report(損益)" },
@@ -308,20 +309,37 @@ export default function DocsPage() {
             <CyberPanel title="Dashboard(ダッシュボード)" code="02 / VIEW" accent="cyan" delay={0.05}>
               <Stack gap={4}>
                 <P>
-                  リアルタイムの相場と取引状況を一望するページです。上部の
+                  AIボット(AI売買判断・Bot戦略)の損益と保有状況を一望するページです。上部の
                   <Box as="span" color="signal.cyan">ペアタブ</Box>
                   (BTC/JPY・ETH/JPYなど、ペアが2つ以上のとき表示)で表示対象を切り替えられます。
+                  相場チャートは<Box as="span" color="signal.cyan">Price Chart</Box>タブに分離されています。
                 </P>
                 <DefTable
                   rows={[
-                    { term: "Price Chart", def: "選択ペアの1分足ローソク足。サーバー起動時にbitbankから直近3日分(CANDLE_SEED_DAYSで変更可)のOHLC履歴を自動取得するため、起動直後からチャート・指標・戦略評価がフルで使えます。以降はWebSocketでリアルタイム更新。" },
+                    { term: "Positions / P&L", def: "選択ペアの保有中ポジションと含み損益(緑=利益/赤=損失)。" },
                     { term: "System Status", def: "配信接続状態と、本日のAIトークン使用量・日次予算の消化状況。" },
                     { term: "AI Decision Log", def: "Claudeの売買判断履歴。判断(BUY/SELL/HOLD)・確信度・理由が並びます。" },
-                    { term: "Positions / P&L", def: "選択ペアの保有中ポジションと含み損益(緑=利益/赤=損失)。" },
+                    { term: "Trade History", def: "全ペアの約定履歴。発生理由(AI判断/BOT戦略/損切り/利確/トレーリング)のラベル付き。" },
+                  ]}
+                />
+              </Stack>
+            </CyberPanel>
+          </Box>
+
+          {/* ---------------- Price Chart ---------------- */}
+          <Box id="chart">
+            <CyberPanel title="Price Chart(チャート)" code="02b / MARKET" accent="cyan" delay={0.05}>
+              <Stack gap={4}>
+                <P>
+                  相場チャートと、価格・指標ベースの監視盤をまとめたページです。ホイールでのズーム/パン操作は
+                  ペアや時間足を切り替えるまで保持されます(価格更新のたびにリセットされることはありません)。
+                </P>
+                <DefTable
+                  rows={[
+                    { term: "Price Chart", def: "選択ペア・時間足のローソク足。サーバー起動時にbitbankから直近3日分(CANDLE_SEED_DAYSで変更可)のOHLC履歴を自動取得するため、起動直後からチャート・指標・戦略評価がフルで使えます。以降はWebSocketでリアルタイム更新。TFセレクタで1分〜1日足に切替可能。" },
+                    { term: "チャートマーカー", def: "ローソク足上に約定(▲買い/▼売り)と見送りシグナル(●)を表示。チャート上部のMARKERSトグルでON/OFFできます。" },
                     { term: "Signal Monitor", def: "「RSI(14) < 30」「価格がSMA(20)を上抜け」のような監視条件を自由に追加・編集・削除できる監視盤。現在値と成立◯/✕が10秒ごとに更新されます(発注はしません)。左辺=価格/指標、右辺=固定値/指標、演算子は大小比較とクロスから選択。" },
                     { term: "Bot Signal Feed", def: "Bot戦略の発火履歴(約定・見送り)。ペア・約定有無・戦略でフィルタできます。履歴はDBに保存されるためリロード後も残ります。" },
-                    { term: "チャートマーカー", def: "ローソク足上に約定(▲買い/▼売り)と見送りシグナル(●)を表示。チャート上部のMARKERSトグルでON/OFFできます。" },
-                    { term: "Trade History", def: "全ペアの約定履歴。発生理由(AI判断/BOT戦略/損切り/利確/トレーリング)のラベル付き。" },
                   ]}
                 />
               </Stack>
