@@ -1,4 +1,5 @@
 import "dotenv/config";
+import type { TradingMode } from "@bitbank-ai-trader/shared";
 
 function requireEnv(name: string, fallback?: string): string {
   const value = process.env[name] ?? fallback;
@@ -47,6 +48,8 @@ const targetPairs = resolveTargetPairs();
 
 export const config = {
   port: Number(process.env.PORT ?? 4000),
+  // "paper"のみ対応(実運用注文APIは呼び出さない)。ペーパートレードのリセットはpaperモードでのみ許可する
+  tradingMode: (process.env.TRADING_MODE === "live" ? "live" : "paper") as TradingMode,
   /** 全取引対象ペア */
   targetPairs,
   /** メインペア(先頭)。AI売買判断ループはこのペアのみを対象にする */

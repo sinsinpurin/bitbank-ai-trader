@@ -6,10 +6,11 @@ import { CyberButton } from "@/components/ui/CyberButton";
 import { formatCostJpy } from "./format";
 
 /**
- * AI売買判断ループのON/OFFと日次予算の消化状況。
- * OFFにするとClaudeの定期呼び出しが止まる(Bot戦略・損切りは影響なし)。
+ * AI判断(Bot Blueprintの「AI Judgment」ノードが使う、Claudeによる売買判断)のON/OFFと
+ * 日次予算の消化状況。OFFにするとどの戦略のAI Judgmentノードも常にfalse扱いになる
+ * (Bot戦略の技術的条件・自動損切りは影響なし)。
  */
-export function AiLoopControlPanel({
+export function AiJudgmentControlPanel({
   enabled,
   usage,
   saving,
@@ -47,8 +48,8 @@ export function AiLoopControlPanel({
           </HStack>
           <Text fontSize="xs" color="text.secondary" mt={1}>
             {enabled
-              ? "Claudeが相場を定期分析し、自動売買判断を行っています(トークンを消費します)"
-              : "AI判断ループは停止中です。Bot戦略と自動損切りは引き続き動作します"}
+              ? "Bot BlueprintのAI Judgmentノードのために、Claudeが相場を定期分析しています(トークンを消費します)"
+              : "AI判断は停止中です。AI Judgmentノードは常に不成立(false)として評価され、Bot戦略の技術的条件・自動損切りは引き続き動作します"}
           </Text>
         </Box>
         <CyberButton
@@ -56,14 +57,14 @@ export function AiLoopControlPanel({
           onClick={() => onToggle(!enabled)}
           disabled={saving}
         >
-          {saving ? "SAVING..." : enabled ? "ループを停止" : "ループを開始"}
+          {saving ? "SAVING..." : enabled ? "AI判断を停止" : "AI判断を開始"}
         </CyberButton>
       </HStack>
 
       <Box>
         <HStack justify="space-between" mb={1}>
           <Text fontFamily="heading" fontSize="10px" letterSpacing="0.14em" textTransform="uppercase" color="text.secondary">
-            本日の判断コスト / 日次予算
+            本日のAI判断コスト / 日次予算
           </Text>
           <Text fontFamily="mono" fontSize="11px" color={budgetColor}>
             {formatCostJpy(usage.todayDecisionCostJpy)} / {formatCostJpy(usage.dailyBudgetJpy)}

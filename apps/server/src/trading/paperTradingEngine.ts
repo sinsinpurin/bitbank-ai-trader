@@ -1,6 +1,5 @@
 import { prisma } from "../db/prisma";
 import { config } from "../config";
-import type { AiDecisionResult } from "../ai/claudeService";
 import type { Position } from "@prisma/client";
 import type { TradeReason } from "@bitbank-ai-trader/shared";
 import { isBuyHalted, onPositionClosed } from "./circuitBreaker";
@@ -24,6 +23,27 @@ function executionPrice(marketPrice: number, side: "buy" | "sell"): number {
 /** 約定金額に対する手数料(円)。bitbank現物taker 0.12% 相当(TRADE_FEE_PCT) */
 function feeOf(notionalJpy: number): number {
   return notionalJpy * (config.fees.takerFeePct / 100);
+}
+
+/**
+ * ペーパートレードの状態(約定履歴・ポジション・仮想残高・Botシグナル履歴)を全て消去し、
+ * 初期残高(JPY)から再開できる状態に戻す。戦略定義・AI利用ログ・アプリ設定は対象外。
+ * 呼び出し元(設定ルート)でconfig.tradingModeが"paper"であることを確認すること。
+ */
+export async function resetPaperTrading() {
+  const currencies = new Set(config.targetPairs.map(assetCurrencyOf));
+  await prisma.$transaction([
+    prisma.trade.deleteMany({}),
+    prisma.position.deleteMany({}),
+    prisma.botSignalLog.deleteMany({}),
+    prisma.virtualBalance.deleteMany({}),
+    prisma.virtualBalance.createMany({
+      data: [
+        { currency: "jpy", amount: INITIAL_JPY_BALANCE },
+        ...[...currencies].map((currency) => ({ currency, amount: 0 })),
+      ],
+    }),
+  ]);
 }
 
 async function ensureInitialBalance(pair: string) {
@@ -226,25 +246,4 @@ export async function openBuyPosition(
   ]);
 
   return { trade, position };
-}
-
-/**
- * AIの判断(buy/sell/hold)を受け取り、仮想残高・ポジション・約定履歴を更新する。
- * 実際の注文APIへの発注は一切行わない。
- */
-export async function applyAiDecision(
-  pair: string,
-  currentPrice: number,
-  decision: AiDecisionResult,
-  aiDecisionLogId: string
-) {
-  if (decision.action === "hold") {
-    return { trade: null, position: null };
-  }
-
-  if (decision.action === "sell") {
-    return closeOldestPosition(pair, currentPrice, "ai_decision", { aiDecisionLogId });
-  }
-
-  return openBuyPosition(pair, currentPrice, "ai_decision", { aiDecisionLogId });
 }

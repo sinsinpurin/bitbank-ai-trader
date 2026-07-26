@@ -19,7 +19,7 @@ export async function fetchSettings(): Promise<SettingsResponse> {
 }
 
 export interface UpdateSettingsInput {
-  aiDecisionEnabled?: boolean;
+  aiJudgmentEnabled?: boolean;
   circuitBreakerEnabled?: boolean;
   dailyMaxLossJpy?: number;
   maxConsecutiveLosses?: number;
@@ -35,6 +35,20 @@ export async function updateSettings(
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
+    })
+  );
+}
+
+/**
+ * ペーパートレードの状態(約定履歴・ポジション・仮想残高・Botシグナル履歴)を全消去する。
+ * 誤操作防止のためサーバー側もconfirm: "RESET"を必須にしている。
+ */
+export async function resetPaperTrading(): Promise<{ ok: true; resetAt: number }> {
+  return handle(
+    await fetch(`${API_URL}/api/settings/reset-paper-trading`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: "RESET" }),
     })
   );
 }

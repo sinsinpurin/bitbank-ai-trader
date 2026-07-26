@@ -5,8 +5,9 @@ import { useCallback, useEffect, useState } from "react";
 import type { SettingsResponse } from "@bitbank-ai-trader/shared";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { CyberPanel } from "@/components/ui/CyberPanel";
-import { AiLoopControlPanel } from "@/components/settings/AiLoopControlPanel";
+import { AiJudgmentControlPanel } from "@/components/settings/AiJudgmentControlPanel";
 import { CircuitBreakerPanel } from "@/components/settings/CircuitBreakerPanel";
+import { PaperTradingResetPanel } from "@/components/settings/PaperTradingResetPanel";
 import { UsageSummaryTiles } from "@/components/settings/UsageSummaryTiles";
 import { UsageDailyTable } from "@/components/settings/UsageDailyTable";
 import { fetchSettings, updateSettings, type UpdateSettingsInput } from "@/lib/settingsApi";
@@ -64,12 +65,12 @@ export default function SettingsPage() {
         {data && (
           <Grid templateColumns={{ base: "1fr", xl: "1fr 2fr" }} gap={6}>
             <GridItem>
-              <CyberPanel title="AI Decision Loop" code="01 / CTRL" accent="red" delay={0}>
-                <AiLoopControlPanel
-                  enabled={data.settings.aiDecisionEnabled}
+              <CyberPanel title="AI Judgment" code="01 / CTRL" accent="red" delay={0}>
+                <AiJudgmentControlPanel
+                  enabled={data.settings.aiJudgmentEnabled}
                   usage={data.usage}
                   saving={saving}
-                  onToggle={(next) => handleUpdate({ aiDecisionEnabled: next })}
+                  onToggle={(next) => handleUpdate({ aiJudgmentEnabled: next })}
                 />
               </CyberPanel>
             </GridItem>
@@ -94,6 +95,12 @@ export default function SettingsPage() {
             <GridItem colSpan={{ base: 1, xl: 2 }}>
               <CyberPanel title="Daily Usage / 日別使用量 (JST)" code="04 / LOG" accent="cyan" delay={0.15}>
                 <UsageDailyTable days={data.usage.days} />
+              </CyberPanel>
+            </GridItem>
+
+            <GridItem colSpan={{ base: 1, xl: 2 }}>
+              <CyberPanel title="Paper Trading Reset / データ初期化" code="05 / RESET" accent="red" delay={0.2}>
+                <PaperTradingResetPanel tradingMode={data.tradingMode} />
               </CyberPanel>
             </GridItem>
           </Grid>

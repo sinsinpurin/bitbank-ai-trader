@@ -9,7 +9,7 @@ export interface PortDef {
   kind: PortKind;
 }
 
-export type NodeCategory = "source" | "indicator" | "condition" | "logic" | "action";
+export type NodeCategory = "source" | "indicator" | "condition" | "logic" | "ai" | "action";
 
 export interface NodeDef {
   type: StrategyNodeType;
@@ -33,6 +33,7 @@ export const CATEGORY_COLOR: Record<NodeCategory, string> = {
   indicator: "#00E5FF",
   condition: "#FF8A1E",
   logic: "#FCEE0A",
+  ai: "#FF003C", // Claude APIを呼び出す=コストが発生することを示す
   action: "#39FF88", // buy。sellは個別に赤へ上書き
 };
 
@@ -162,6 +163,28 @@ export const NODE_CATALOG: NodeDef[] = [
           { value: "not", label: "NOT (Aのみ)" },
         ],
       },
+    ],
+  },
+  {
+    type: "ai_judgment",
+    label: "AI Judgment",
+    category: "ai",
+    description:
+      "Claudeによる売買判断が一致した瞬間に真を返す。数分間隔でAPIを呼び出すためコストが発生する",
+    inputs: [],
+    outputs: [{ id: "out", label: "cond", kind: "bool" }],
+    defaultParams: { expect: "buy", minConfidence: 0.6 },
+    paramFields: [
+      {
+        key: "expect",
+        label: "判断",
+        kind: "select",
+        options: [
+          { value: "buy", label: "BUYと判断" },
+          { value: "sell", label: "SELLと判断" },
+        ],
+      },
+      { key: "minConfidence", label: "最小確信度", kind: "number", min: 0, step: 0.05 },
     ],
   },
   {

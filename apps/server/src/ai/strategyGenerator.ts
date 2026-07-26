@@ -26,6 +26,7 @@ const NODE_SPEC: Record<
   compare: { inputs: { a: "number", b: "number" }, output: "bool" },
   cross: { inputs: { a: "number", b: "number" }, output: "bool" },
   logic: { inputs: { a: "bool", b: "bool" }, output: "bool" },
+  ai_judgment: { inputs: {}, output: "bool" },
   buy: { inputs: { condition: "bool" }, output: null },
   sell: { inputs: { condition: "bool" }, output: null },
 };
@@ -50,6 +51,10 @@ const buildSystemPrompt = (pair: string) => `あなたは${pairLabel(pair)}の1�
 - compare: 入力 a, b(number) → 出力 out(bool)。params.op = "gt"|"lt"|"gte"|"lte"(a op b)
 - cross: 入力 a, b(number) → 出力 out(bool)。params.op = "cross_above"(aがbを上抜けた瞬間のみ真)|"cross_below"
 - logic: 入力 a, b(bool) → 出力 out(bool)。params.op = "and"|"or"|"not"("not"はaのみ使用)
+- ai_judgment: 入力なし → 出力 out(bool)。Claudeによる売買判断が params.expect ("buy"|"sell")
+  と一致し、かつ確信度が params.minConfidence(0-1、既定0)以上のとき、その判断が届いた瞬間だけ真になる。
+  Claude APIを裏で呼び出すため低頻度(数分間隔)かつコストがかかる。必ずcompare/cross等の
+  技術的条件と組み合わせて使うこと(ai_judgment単体をbuy/sellへ直結する設計は避ける)。
 - buy: 入力 condition(bool)。条件が偽→真に変わった瞬間に買い(ペーパー注文)
 - sell: 入力 condition(bool)。条件が偽→真に変わった瞬間に保有ポジションを決済
 
@@ -57,6 +62,7 @@ const buildSystemPrompt = (pair: string) => `あなたは${pairLabel(pair)}の1�
 - 条件の「立ち上がりエッジ」で1回だけ発火し、以後60秒のクールダウンがある。
   そのため compare(継続的に真になる)より cross(瞬間だけ真)が発注条件に向くことが多い。
 - 必ず buy ノードを1つ以上含め、可能なら sell ノード(手仕舞い条件)も含めること。
+- ユーザーが「AIの判断も使って」のように明示的に要望した場合のみ ai_judgment ノードを使うこと。
 - グラフは必要最小限のノード数で構成すること。座標は不要(サーバー側で自動レイアウトする)。
 
 ## 出力
@@ -90,6 +96,8 @@ const STRATEGY_TOOL = {
                   type: "string" as const,
                   enum: ["gt", "lt", "gte", "lte", "cross_above", "cross_below", "and", "or", "not"],
                 },
+                expect: { type: "string" as const, enum: ["buy", "sell"] },
+                minConfidence: { type: "number" as const },
               },
             },
           },
@@ -206,6 +214,18 @@ function validateGraph(graph: StrategyGraph): string[] {
       const period = Number(node.params.period);
       if (!Number.isInteger(period) || period < 1 || period > 400) {
         errors.push(`${node.type} ノード(${node.id})のperiodが不正です: ${node.params.period}`);
+      }
+    }
+    if (node.type === "ai_judgment") {
+      const expect = node.params.expect;
+      if (expect !== "buy" && expect !== "sell") {
+        errors.push(`ai_judgment ノード(${node.id})のexpectはbuy/sellのいずれかである必要があります`);
+      }
+      if (node.params.minConfidence !== undefined) {
+        const minConfidence = Number(node.params.minConfidence);
+        if (!Number.isFinite(minConfidence) || minConfidence < 0 || minConfidence > 1) {
+          errors.push(`ai_judgment ノード(${node.id})のminConfidenceは0〜1である必要があります`);
+        }
       }
     }
   }

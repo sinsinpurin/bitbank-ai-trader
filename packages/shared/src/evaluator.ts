@@ -1,4 +1,5 @@
 import type {
+  AiAction,
   CompareOp,
   CrossOp,
   LogicOp,
@@ -67,6 +68,13 @@ function asBoolSeries(series: Series | null, length: number): boolean[] {
 export interface EvaluateOptions {
   /** trueにするとアクションノードから辿れないノードも含め、全ノードの最新値をnodeValuesへ格納する */
   collectValues?: boolean;
+  /**
+   * ai_judgmentノード用。呼び出し側がペアごとに解決した現在のAI判断キャッシュを渡す。
+   * isFreshは「このtickで初めて観測した新しい判断か」を示し、trueの間だけ条件の立ち上がり
+   * (false→true)を許可する(同じ判断で連続発火しないようにするため)。
+   * 未指定(undefined/null)の場合、ai_judgmentノードは常にfalseを返す。
+   */
+  aiJudgment?: { action: AiAction; confidence: number; isFresh: boolean } | null;
 }
 
 export function evaluateGraph(
@@ -187,6 +195,22 @@ export function evaluateGraph(
           const b = asBoolSeries(inputSeries(nodeId, "b"), length);
           result = a.map((av, i) => (op === "and" ? av && b[i] : av || b[i]));
         }
+        break;
+      }
+
+      case "ai_judgment": {
+        const expect = stringParam(node, "expect", "buy");
+        const minConfidence = numberParam(node, "minConfidence", 0);
+        const judgment = options.aiJudgment ?? null;
+        const matches =
+          judgment !== null && judgment.action === expect && judgment.confidence >= minConfidence;
+        const series = new Array<boolean>(length).fill(false);
+        if (matches && length > 0) {
+          series[length - 1] = true;
+          // 新規判断でなければ(=前回のtickから既に成立していたなら)立ち上がりエッジにしない
+          if (length > 1) series[length - 2] = !judgment!.isFresh;
+        }
+        result = series;
         break;
       }
 

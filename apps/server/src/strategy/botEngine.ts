@@ -5,6 +5,7 @@ import { config } from "../config";
 import { closeOldestPosition, openBuyPosition } from "../trading/paperTradingEngine";
 import { isBuyHalted } from "../trading/circuitBreaker";
 import { toPositionEvent, toTradeEvent } from "../trading/mappers";
+import { getJudgment, setWatchedPairs } from "../ai/aiJudgment";
 import {
   evaluateGraph,
   minutesOfTimeframe,
@@ -70,6 +71,8 @@ let activeStrategies: ActiveStrategy[] = [];
 const lastFiredAt = new Map<string, number>();
 // ペアごとの評価中フラグ(同一ペアの評価が重ならないようにする)
 const evaluatingPairs = new Set<string>();
+// 戦略ごとに最後まで見たAI判断のupdatedAt(ai_judgmentノードの立ち上がりエッジ検出に使う)
+const lastSeenJudgmentAt = new Map<string, number>();
 
 interface CandlestickResponse {
   success: 0 | 1;
@@ -218,6 +221,16 @@ export async function reloadActiveStrategies() {
       },
     ];
   });
+
+  // ai_judgmentノードを使う戦略のペアのみをAI判断キャッシュの監視対象にする
+  // (無関係なペアの分までClaude呼び出しコストが膨らまないようにするため)
+  const pairsUsingAiJudgment = new Set(
+    activeStrategies
+      .filter((s) => s.graph.nodes.some((n) => n.type === "ai_judgment"))
+      .map((s) => s.pair)
+  );
+  setWatchedPairs(pairsUsingAiJudgment);
+
   console.info(`[botEngine] アクティブ戦略を再読込しました (${activeStrategies.length}件)`);
 }
 
@@ -339,12 +352,21 @@ export async function onTick(pair: string, price: number, timestampMs: number) {
 
   evaluatingPairs.add(pair);
   try {
+    // このペアのAI判断キャッシュは全戦略で共通(ai_judgmentノードを含む戦略のみが実質的に使う)
+    const judgment = getJudgment(pair);
+
     for (const strategy of strategies) {
       const cooldownMs = config.bot.cooldownMs;
       const firedAt = lastFiredAt.get(strategy.id) ?? 0;
       if (Date.now() - firedAt < cooldownMs) continue;
 
-      const evaluation = evaluateGraph(strategy.graph, closes);
+      const lastSeenAt = lastSeenJudgmentAt.get(strategy.id) ?? 0;
+      const isFresh = judgment !== null && judgment.updatedAt > lastSeenAt;
+      const evaluation = evaluateGraph(strategy.graph, closes, {
+        aiJudgment: judgment && { action: judgment.action, confidence: judgment.confidence, isFresh },
+      });
+      if (judgment) lastSeenJudgmentAt.set(strategy.id, judgment.updatedAt);
+
       if (evaluation.errors.length > 0) {
         console.warn(`[botEngine] 戦略 "${strategy.name}" の評価エラー:`, evaluation.errors);
         continue;

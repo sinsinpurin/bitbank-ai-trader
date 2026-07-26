@@ -226,6 +226,7 @@ function NodeReference() {
 const TOC = [
   { id: "overview", label: "概要・はじめかた" },
   { id: "dashboard", label: "Dashboard(ダッシュボード)" },
+  { id: "chart", label: "Price Chart(チャート)" },
   { id: "strategies", label: "Bot Blueprint(戦略エディタ)" },
   { id: "risk", label: "リスク管理・サーキットブレーカー" },
   { id: "pnl", label: "P&L Report(損益)" },
@@ -308,20 +309,36 @@ export default function DocsPage() {
             <CyberPanel title="Dashboard(ダッシュボード)" code="02 / VIEW" accent="cyan" delay={0.05}>
               <Stack gap={4}>
                 <P>
-                  リアルタイムの相場と取引状況を一望するページです。上部の
+                  AIボット(AI売買判断・Bot戦略)の損益と保有状況を一望するページです。上部の
                   <Box as="span" color="signal.cyan">ペアタブ</Box>
                   (BTC/JPY・ETH/JPYなど、ペアが2つ以上のとき表示)で表示対象を切り替えられます。
+                  相場チャートは<Box as="span" color="signal.cyan">Price Chart</Box>タブに分離されています。
                 </P>
                 <DefTable
                   rows={[
-                    { term: "Price Chart", def: "選択ペアの1分足ローソク足。サーバー起動時にbitbankから直近3日分(CANDLE_SEED_DAYSで変更可)のOHLC履歴を自動取得するため、起動直後からチャート・指標・戦略評価がフルで使えます。以降はWebSocketでリアルタイム更新。" },
-                    { term: "System Status", def: "配信接続状態と、本日のAIトークン使用量・日次予算の消化状況。" },
-                    { term: "AI Decision Log", def: "Claudeの売買判断履歴。判断(BUY/SELL/HOLD)・確信度・理由が並びます。" },
                     { term: "Positions / P&L", def: "選択ペアの保有中ポジションと含み損益(緑=利益/赤=損失)。" },
+                    { term: "System Status", def: "配信接続状態と、本日のAIトークン使用量・日次予算の消化状況。" },
+                    { term: "Trade History", def: "全ペアの約定履歴。発生理由(AI判断/BOT戦略/損切り/利確/トレーリング)のラベル付き。" },
+                  ]}
+                />
+              </Stack>
+            </CyberPanel>
+          </Box>
+
+          {/* ---------------- Price Chart ---------------- */}
+          <Box id="chart">
+            <CyberPanel title="Price Chart(チャート)" code="02b / MARKET" accent="cyan" delay={0.05}>
+              <Stack gap={4}>
+                <P>
+                  相場チャートと、価格・指標ベースの監視盤をまとめたページです。ホイールでのズーム/パン操作は
+                  ペアや時間足を切り替えるまで保持されます(価格更新のたびにリセットされることはありません)。
+                </P>
+                <DefTable
+                  rows={[
+                    { term: "Price Chart", def: "選択ペア・時間足のローソク足。サーバー起動時にbitbankから直近3日分(CANDLE_SEED_DAYSで変更可)のOHLC履歴を自動取得するため、起動直後からチャート・指標・戦略評価がフルで使えます。以降はWebSocketでリアルタイム更新。TFセレクタで1分〜1日足に切替可能。" },
+                    { term: "チャートマーカー", def: "ローソク足上に約定(▲買い/▼売り)と見送りシグナル(●)を表示。チャート上部のMARKERSトグルでON/OFFできます。" },
                     { term: "Signal Monitor", def: "「RSI(14) < 30」「価格がSMA(20)を上抜け」のような監視条件を自由に追加・編集・削除できる監視盤。現在値と成立◯/✕が10秒ごとに更新されます(発注はしません)。左辺=価格/指標、右辺=固定値/指標、演算子は大小比較とクロスから選択。" },
                     { term: "Bot Signal Feed", def: "Bot戦略の発火履歴(約定・見送り)。ペア・約定有無・戦略でフィルタできます。履歴はDBに保存されるためリロード後も残ります。" },
-                    { term: "チャートマーカー", def: "ローソク足上に約定(▲買い/▼売り)と見送りシグナル(●)を表示。チャート上部のMARKERSトグルでON/OFFできます。" },
-                    { term: "Trade History", def: "全ペアの約定履歴。発生理由(AI判断/BOT戦略/損切り/利確/トレーリング)のラベル付き。" },
                   ]}
                 />
               </Stack>
@@ -369,6 +386,20 @@ export default function DocsPage() {
                   — 内容を確認・調整してからSaveしてください。生成1回あたり数円のAPIコストがかかります。
                 </P>
 
+                <SubHeading>AI Judgment(AI判断ノード)</SubHeading>
+                <P>
+                  Claudeによる売買判断を、他の技術的条件と同じように条件ノードとして組み込めます。
+                  「判断」でBUY/SELLどちらに反応するか、「最小確信度」でしきい値を選べます。
+                  判断は数分間隔でキャッシュされ(Settingsの日次予算・ON/OFFの対象)、新しい判断が
+                  届いた瞬間だけ立ち上がりエッジとして発火します。
+                </P>
+                <Note tone="orange">
+                  Claude APIを呼び出すためコストが発生し、頻度も数分に1回程度に制限されます。
+                  ai_judgment単体をBuy/Sellへ直結するより、SMA/RSIなどの技術的条件とANDで
+                  組み合わせる使い方を推奨します。Deploy前のライブプレビューでは、そのペアを
+                  使う戦略をDeployするまでAI判断が「未取得」のままになります。
+                </Note>
+
                 <SubHeading>ノードリファレンス</SubHeading>
                 <NodeReference />
               </Stack>
@@ -415,6 +446,14 @@ export default function DocsPage() {
                   発動中はSettingsの安全装置パネルに赤い警告が表示されます。発動状態はサーバーを
                   再起動しても当日中は維持されます。
                 </Note>
+
+                <SubHeading>ペーパートレードのリセット(Settings)</SubHeading>
+                <P>
+                  約定履歴・保有ポジション・仮想残高・Botシグナル履歴を全て削除し、初期残高(¥1,000,000)
+                  から再開できます。戦略の定義・AI利用ログ(トークン使用量・コスト)・各種設定は削除されません。
+                  誤操作防止のため確認欄に「RESET」と入力する必要があり、取引モードが実運用(live)の場合は
+                  実行できません(現状はpaperのみ対応)。
+                </P>
               </Stack>
             </CyberPanel>
           </Box>
@@ -451,8 +490,8 @@ export default function DocsPage() {
                 <DefTable
                   rows={[
                     {
-                      term: "AI Decision Loop",
-                      def: "Claudeによる定期売買判断のON/OFF。OFFにするとトークン消費が止まります(Bot戦略・損切り等は動き続けます)。設定は保存され、再起動後も維持されます。日次予算(既定¥100)を超えた日は自動でスキップされます。",
+                      term: "AI Judgment",
+                      def: "Bot BlueprintのAI JudgmentノードのためのClaude定期呼び出しのON/OFF。OFFにするとAI Judgmentノードは常に不成立(false)扱いになりトークン消費も止まります(Bot戦略の技術的条件・自動損切り等は動き続けます)。設定は保存され、再起動後も維持されます。日次予算(既定¥100)を超えた日は自動でスキップされます。",
                     },
                     {
                       term: "Circuit Breaker",
@@ -477,11 +516,12 @@ export default function DocsPage() {
                 </Muted>
                 <DefTable
                   rows={[
-                    { term: "TARGET_PAIRS", def: "取引対象ペア(カンマ区切り)。例: btc_jpy,eth_jpy。先頭がメインペア(AI判断ループの対象)。既定: btc_jpy" },
+                    { term: "TARGET_PAIRS", def: "取引対象ペア(カンマ区切り)。例: btc_jpy,eth_jpy。先頭がメインペア。既定: btc_jpy" },
+                    { term: "TRADING_MODE", def: "取引モード。現状は paper のみ対応(実運用注文APIは呼び出さない)。Settingsのペーパートレードリセットは paper のときのみ実行できる。既定: paper" },
                     { term: "ANTHROPIC_API_KEY", def: "Claude APIキー。AI売買判断・AI戦略生成に必要。" },
                     { term: "AI_MODEL", def: "売買判断用モデル。既定: claude-haiku-4-5(高頻度呼び出しのため低コストモデル)" },
                     { term: "AI_STRATEGY_MODEL", def: "戦略生成用モデル。既定: claude-opus-4-8(単発・高品質重視)" },
-                    { term: "AI_DAILY_BUDGET_JPY", def: "AI判断ループの日次コスト上限(円)。超過した日は呼び出し停止。既定: 100" },
+                    { term: "AI_DAILY_BUDGET_JPY", def: "AI判断(AI Judgmentノード)の日次コスト上限(円)。超過した日は呼び出し停止。既定: 100" },
                     { term: "AI_MAX_POSITION_JPY", def: "1回の買い投入額の既定値(円)。戦略別設定が優先。既定: 30000" },
                     { term: "AI_MAX_OPEN_POSITIONS", def: "同時保有ポジション数の既定上限。既定: 3" },
                     { term: "AI_STOP_LOSS_PCT", def: "自動損切り率の既定値(%)。戦略別設定が優先。既定: 3" },

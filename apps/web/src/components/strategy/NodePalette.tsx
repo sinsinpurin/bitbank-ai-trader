@@ -11,10 +11,18 @@ const CATEGORY_LABEL: Record<NodeCategory, string> = {
   indicator: "Indicator",
   condition: "Condition",
   logic: "Logic",
+  ai: "AI Judgment",
   action: "Action",
 };
 
-const CATEGORY_ORDER: NodeCategory[] = ["source", "indicator", "condition", "logic", "action"];
+const CATEGORY_ORDER: NodeCategory[] = [
+  "source",
+  "indicator",
+  "condition",
+  "logic",
+  "ai",
+  "action",
+];
 
 export function NodePalette({ onAdd }: { onAdd: (type: StrategyNodeType) => void }) {
   return (

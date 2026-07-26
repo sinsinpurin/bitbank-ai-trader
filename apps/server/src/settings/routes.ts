@@ -8,15 +8,17 @@ import type {
 import { prisma } from "../db/prisma";
 import { config } from "../config";
 import { estimateCostJpy } from "../ai/pricing";
-import { isAiDecisionEnabled, setAiDecisionEnabled } from "../ai/decisionLoop";
+import { isAiJudgmentEnabled, setAiJudgmentEnabled } from "../ai/aiJudgment";
 import {
   getCircuitBreakerSettings,
   getCircuitBreakerStatus,
   resumeTrading,
   updateCircuitBreakerSettings,
 } from "../trading/circuitBreaker";
+import { resetPaperTrading } from "../trading/paperTradingEngine";
+import { broadcast } from "../ws/relay";
 
-const AI_DECISION_ENABLED_KEY = "aiDecisionEnabled";
+const AI_JUDGMENT_ENABLED_KEY = "aiJudgmentEnabled";
 const USAGE_DAYS = 30;
 
 /** JST基準の日付キー("YYYY-MM-DD") */
@@ -31,11 +33,11 @@ function jstTodayBoundary(): Date {
   return new Date(jstMidnight - 9 * 60 * 60 * 1000);
 }
 
-/** 起動時に永続化された設定をdecisionLoopへ反映する */
+/** 起動時に永続化された設定をaiJudgmentへ反映する */
 async function loadPersistedSettings() {
-  const row = await prisma.appSetting.findUnique({ where: { key: AI_DECISION_ENABLED_KEY } });
+  const row = await prisma.appSetting.findUnique({ where: { key: AI_JUDGMENT_ENABLED_KEY } });
   if (row) {
-    setAiDecisionEnabled(row.value === "true");
+    setAiJudgmentEnabled(row.value === "true");
   }
 }
 
@@ -119,7 +121,7 @@ async function buildUsageSummary(): Promise<AiUsageSummary> {
 function currentSettings(): AppSettings {
   const breaker = getCircuitBreakerSettings();
   return {
-    aiDecisionEnabled: isAiDecisionEnabled(),
+    aiJudgmentEnabled: isAiJudgmentEnabled(),
     circuitBreakerEnabled: breaker.enabled,
     dailyMaxLossJpy: breaker.dailyMaxLossJpy,
     maxConsecutiveLosses: breaker.maxConsecutiveLosses,
@@ -134,12 +136,13 @@ export async function settingsRoutes(app: FastifyInstance) {
       settings: currentSettings(),
       circuitBreaker: getCircuitBreakerStatus(),
       usage: await buildUsageSummary(),
+      tradingMode: config.tradingMode,
     };
   });
 
   app.put<{
     Body: {
-      aiDecisionEnabled?: boolean;
+      aiJudgmentEnabled?: boolean;
       circuitBreakerEnabled?: boolean;
       dailyMaxLossJpy?: number;
       maxConsecutiveLosses?: number;
@@ -150,7 +153,7 @@ export async function settingsRoutes(app: FastifyInstance) {
     const body = request.body ?? {};
 
     if (
-      body.aiDecisionEnabled === undefined &&
+      body.aiJudgmentEnabled === undefined &&
       body.circuitBreakerEnabled === undefined &&
       body.dailyMaxLossJpy === undefined &&
       body.maxConsecutiveLosses === undefined &&
@@ -160,16 +163,16 @@ export async function settingsRoutes(app: FastifyInstance) {
     }
 
     try {
-      if (body.aiDecisionEnabled !== undefined) {
-        if (typeof body.aiDecisionEnabled !== "boolean") {
-          return reply.status(400).send({ error: "aiDecisionEnabled はbooleanで指定してください" });
+      if (body.aiJudgmentEnabled !== undefined) {
+        if (typeof body.aiJudgmentEnabled !== "boolean") {
+          return reply.status(400).send({ error: "aiJudgmentEnabled はbooleanで指定してください" });
         }
         await prisma.appSetting.upsert({
-          where: { key: AI_DECISION_ENABLED_KEY },
-          update: { value: String(body.aiDecisionEnabled) },
-          create: { key: AI_DECISION_ENABLED_KEY, value: String(body.aiDecisionEnabled) },
+          where: { key: AI_JUDGMENT_ENABLED_KEY },
+          update: { value: String(body.aiJudgmentEnabled) },
+          create: { key: AI_JUDGMENT_ENABLED_KEY, value: String(body.aiJudgmentEnabled) },
         });
-        setAiDecisionEnabled(body.aiDecisionEnabled);
+        setAiJudgmentEnabled(body.aiJudgmentEnabled);
       }
 
       await updateCircuitBreakerSettings({
@@ -189,4 +192,33 @@ export async function settingsRoutes(app: FastifyInstance) {
 
     return { settings: currentSettings(), circuitBreaker: getCircuitBreakerStatus() };
   });
+
+  /**
+   * ペーパートレードの状態(約定履歴・ポジション・仮想残高・Botシグナル履歴)を全消去し、
+   * 初期残高から再開できる状態に戻す。誤操作防止のため confirm: "RESET" を必須にする。
+   * 実運用APIには一切触れないが、念のためtradingMode==="paper"のときのみ許可する。
+   */
+  app.post<{ Body: { confirm?: string } }>(
+    "/api/settings/reset-paper-trading",
+    async (request, reply) => {
+      if (config.tradingMode !== "paper") {
+        return reply
+          .status(403)
+          .send({ error: "ペーパートレードモードでのみリセットできます" });
+      }
+      if (request.body?.confirm !== "RESET") {
+        return reply
+          .status(400)
+          .send({ error: '確認のため confirm: "RESET" を指定してください' });
+      }
+
+      await resetPaperTrading();
+      await resumeTrading(); // 削除済みポジションに紐づくサーキットブレーカーの発動状態も解除する
+
+      const resetAt = Date.now();
+      broadcast({ type: "paper_trading_reset", payload: { resetAt } });
+
+      return { ok: true, resetAt };
+    }
+  );
 }

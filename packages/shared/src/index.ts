@@ -77,7 +77,8 @@ export interface Position {
   strategyId?: string | null;
 }
 
-/** 約定の発生理由。AIの売買判断・Bot戦略・リスク管理の自動決済(損切り/利確/トレーリング) */
+/** 約定の発生理由。ai_decisionは廃止された旧AI判断ループの名残(過去データ表示用に残置)。
+ *  現在の新規約定はBot戦略(ai_judgmentノードを含む場合も)経由でbot_strategyになる */
 export type TradeReason =
   | "ai_decision"
   | "stop_loss"
@@ -99,14 +100,14 @@ export interface Trade {
   fee?: number;
 }
 
-/** Claudeによる売買判断結果 */
-export interface AiDecision {
-  id: string;
+/** Bot Blueprintの「AI Judgment」ノードが参照する、ペアごとの最新AI判断キャッシュ(GET /api/ai-judgment) */
+export interface AiJudgment {
   pair: Pair;
   action: AiAction;
   confidence: number; // 0.0 - 1.0
   reasoning: string;
-  createdAt: number;
+  /** この判断がキャッシュされた時刻(エポックms) */
+  updatedAt: number;
 }
 
 /** その日のAIトークン利用量・推定コストのサマリ */
@@ -131,6 +132,7 @@ export interface AiUsageStats {
  * - indicator: sma / ema / rsi(数値シリーズ → 数値シリーズ)
  * - condition: compare(大小比較), cross(クロス判定)
  * - logic: and / or / not(真偽シリーズの合成)
+ * - ai: ai_judgment(Claudeの売買判断が指定アクションと一致した瞬間に真になる条件)
  * - action: buy / sell(条件の立ち上がりで発注)
  */
 export type StrategyNodeType =
@@ -142,6 +144,7 @@ export type StrategyNodeType =
   | "compare"
   | "cross"
   | "logic"
+  | "ai_judgment"
   | "buy"
   | "sell";
 
@@ -231,10 +234,13 @@ export interface BotSignal {
 // アプリ設定・AI使用量
 // ---------------------------------------------------------------------------
 
+/** 取引モード。"paper"のみ対応(実運用注文APIは呼び出さない)。ペーパートレードのリセットはpaperモードでのみ許可する */
+export type TradingMode = "paper" | "live";
+
 /** ランタイムで変更できるアプリ設定 */
 export interface AppSettings {
-  /** AI売買判断ループ(Claude定期呼び出し)を有効にするか */
-  aiDecisionEnabled: boolean;
+  /** AI判断(Bot BlueprintのAI Judgmentノード用、Claude定期呼び出し)を有効にするか */
+  aiJudgmentEnabled: boolean;
   /** サーキットブレーカー(日次最大損失・連敗自動停止)を有効にするか */
   circuitBreakerEnabled: boolean;
   /** 本日(JST)の実現損失がこの額を超えたら全Botの新規買いを停止する(円) */
@@ -268,7 +274,7 @@ export interface AiUsageSummary {
   decisionModel: string;
   strategyModel: string;
   dailyBudgetJpy: number;
-  /** 本日(JST)の売買判断ループ分の推定コスト。日次予算の判定対象はこちらのみ */
+  /** 本日(JST)のAI判断(Bot Blueprint AI Judgmentノード)分の推定コスト。日次予算の判定対象はこちらのみ */
   todayDecisionCostJpy: number;
   budgetExceeded: boolean;
   /** 直近30日(JST)の日別使用量。新しい日が先頭 */
@@ -287,6 +293,8 @@ export interface SettingsResponse {
   settings: AppSettings;
   circuitBreaker: CircuitBreakerStatus;
   usage: AiUsageSummary;
+  /** 現在の取引モード。"paper"のときのみペーパートレードのリセットができる */
+  tradingMode: TradingMode;
 }
 
 // ---------------------------------------------------------------------------
@@ -337,7 +345,7 @@ export interface PnlStrategyBreakdown {
 /** GET /api/pairs が返す取引対象ペア情報 */
 export interface PairsInfo {
   pairs: Pair[];
-  /** メインペア。AI売買判断ループの対象 */
+  /** メインペア(先頭ペア) */
   primaryPair: Pair;
 }
 
@@ -413,9 +421,9 @@ export interface SignalWatch {
 /** WebSocketでサーバーからフロントへ配信するメッセージの共通形式 */
 export type ServerEvent =
   | { type: "ticker"; payload: Ticker }
-  | { type: "ai_decision"; payload: AiDecision }
   | { type: "trade"; payload: Trade }
   | { type: "position_update"; payload: Position }
   | { type: "usage_stats"; payload: AiUsageStats }
   | { type: "bot_signal"; payload: BotSignal }
-  | { type: "strategy_update"; payload: Strategy };
+  | { type: "strategy_update"; payload: Strategy }
+  | { type: "paper_trading_reset"; payload: { resetAt: number } };
