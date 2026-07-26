@@ -231,6 +231,9 @@ export interface BotSignal {
 // アプリ設定・AI使用量
 // ---------------------------------------------------------------------------
 
+/** 取引モード。"paper"のみ対応(実運用注文APIは呼び出さない)。ペーパートレードのリセットはpaperモードでのみ許可する */
+export type TradingMode = "paper" | "live";
+
 /** ランタイムで変更できるアプリ設定 */
 export interface AppSettings {
   /** AI売買判断ループ(Claude定期呼び出し)を有効にするか */
@@ -287,6 +290,8 @@ export interface SettingsResponse {
   settings: AppSettings;
   circuitBreaker: CircuitBreakerStatus;
   usage: AiUsageSummary;
+  /** 現在の取引モード。"paper"のときのみペーパートレードのリセットができる */
+  tradingMode: TradingMode;
 }
 
 // ---------------------------------------------------------------------------
@@ -418,4 +423,5 @@ export type ServerEvent =
   | { type: "position_update"; payload: Position }
   | { type: "usage_stats"; payload: AiUsageStats }
   | { type: "bot_signal"; payload: BotSignal }
-  | { type: "strategy_update"; payload: Strategy };
+  | { type: "strategy_update"; payload: Strategy }
+  | { type: "paper_trading_reset"; payload: { resetAt: number } };

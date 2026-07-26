@@ -26,6 +26,27 @@ function feeOf(notionalJpy: number): number {
   return notionalJpy * (config.fees.takerFeePct / 100);
 }
 
+/**
+ * ペーパートレードの状態(約定履歴・ポジション・仮想残高・Botシグナル履歴)を全て消去し、
+ * 初期残高(JPY)から再開できる状態に戻す。戦略定義・AI利用ログ・アプリ設定は対象外。
+ * 呼び出し元(設定ルート)でconfig.tradingModeが"paper"であることを確認すること。
+ */
+export async function resetPaperTrading() {
+  const currencies = new Set(config.targetPairs.map(assetCurrencyOf));
+  await prisma.$transaction([
+    prisma.trade.deleteMany({}),
+    prisma.position.deleteMany({}),
+    prisma.botSignalLog.deleteMany({}),
+    prisma.virtualBalance.deleteMany({}),
+    prisma.virtualBalance.createMany({
+      data: [
+        { currency: "jpy", amount: INITIAL_JPY_BALANCE },
+        ...[...currencies].map((currency) => ({ currency, amount: 0 })),
+      ],
+    }),
+  ]);
+}
+
 async function ensureInitialBalance(pair: string) {
   await prisma.virtualBalance.upsert({
     where: { currency: "jpy" },

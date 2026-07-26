@@ -40,9 +40,11 @@ export default function DashboardPage() {
   const [showTradeMarkers, setShowTradeMarkers] = useState(true);
   const [showSignalMarkers, setShowSignalMarkers] = useState(true);
 
-  const displayDecisions = aiDecisions.length > 0 ? aiDecisions : mockAiDecisions;
-  const displayPositions = positions.length > 0 ? positions : mockPositions;
-  const displayTrades = trades.length > 0 ? trades : mockTrades;
+  // 未接続時のみダミーの初期シードデータを見せる。接続済みなら0件でもそのまま表示する
+  // (リセット直後など、正当な0件をダミーデータと誤表示しないため)
+  const displayDecisions = connected ? aiDecisions : mockAiDecisions;
+  const displayPositions = connected ? positions : mockPositions;
+  const displayTrades = connected ? trades : mockTrades;
   const currentPrice = candles[candles.length - 1]?.close ?? 0;
 
   // ポジション/損益はペア別価格で評価するため、表示中ペアのみ表示する

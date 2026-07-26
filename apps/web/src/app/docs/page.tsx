@@ -415,6 +415,14 @@ export default function DocsPage() {
                   発動中はSettingsの安全装置パネルに赤い警告が表示されます。発動状態はサーバーを
                   再起動しても当日中は維持されます。
                 </Note>
+
+                <SubHeading>ペーパートレードのリセット(Settings)</SubHeading>
+                <P>
+                  約定履歴・保有ポジション・仮想残高・Botシグナル履歴を全て削除し、初期残高(¥1,000,000)
+                  から再開できます。戦略の定義・AI利用ログ(トークン使用量・コスト)・各種設定は削除されません。
+                  誤操作防止のため確認欄に「RESET」と入力する必要があり、取引モードが実運用(live)の場合は
+                  実行できません(現状はpaperのみ対応)。
+                </P>
               </Stack>
             </CyberPanel>
           </Box>
@@ -478,6 +486,7 @@ export default function DocsPage() {
                 <DefTable
                   rows={[
                     { term: "TARGET_PAIRS", def: "取引対象ペア(カンマ区切り)。例: btc_jpy,eth_jpy。先頭がメインペア(AI判断ループの対象)。既定: btc_jpy" },
+                    { term: "TRADING_MODE", def: "取引モード。現状は paper のみ対応(実運用注文APIは呼び出さない)。Settingsのペーパートレードリセットは paper のときのみ実行できる。既定: paper" },
                     { term: "ANTHROPIC_API_KEY", def: "Claude APIキー。AI売買判断・AI戦略生成に必要。" },
                     { term: "AI_MODEL", def: "売買判断用モデル。既定: claude-haiku-4-5(高頻度呼び出しのため低コストモデル)" },
                     { term: "AI_STRATEGY_MODEL", def: "戦略生成用モデル。既定: claude-opus-4-8(単発・高品質重視)" },

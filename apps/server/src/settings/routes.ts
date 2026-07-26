@@ -15,6 +15,8 @@ import {
   resumeTrading,
   updateCircuitBreakerSettings,
 } from "../trading/circuitBreaker";
+import { resetPaperTrading } from "../trading/paperTradingEngine";
+import { broadcast } from "../ws/relay";
 
 const AI_DECISION_ENABLED_KEY = "aiDecisionEnabled";
 const USAGE_DAYS = 30;
@@ -134,6 +136,7 @@ export async function settingsRoutes(app: FastifyInstance) {
       settings: currentSettings(),
       circuitBreaker: getCircuitBreakerStatus(),
       usage: await buildUsageSummary(),
+      tradingMode: config.tradingMode,
     };
   });
 
@@ -189,4 +192,33 @@ export async function settingsRoutes(app: FastifyInstance) {
 
     return { settings: currentSettings(), circuitBreaker: getCircuitBreakerStatus() };
   });
+
+  /**
+   * ペーパートレードの状態(約定履歴・ポジション・仮想残高・Botシグナル履歴)を全消去し、
+   * 初期残高から再開できる状態に戻す。誤操作防止のため confirm: "RESET" を必須にする。
+   * 実運用APIには一切触れないが、念のためtradingMode==="paper"のときのみ許可する。
+   */
+  app.post<{ Body: { confirm?: string } }>(
+    "/api/settings/reset-paper-trading",
+    async (request, reply) => {
+      if (config.tradingMode !== "paper") {
+        return reply
+          .status(403)
+          .send({ error: "ペーパートレードモードでのみリセットできます" });
+      }
+      if (request.body?.confirm !== "RESET") {
+        return reply
+          .status(400)
+          .send({ error: '確認のため confirm: "RESET" を指定してください' });
+      }
+
+      await resetPaperTrading();
+      await resumeTrading(); // 削除済みポジションに紐づくサーキットブレーカーの発動状態も解除する
+
+      const resetAt = Date.now();
+      broadcast({ type: "paper_trading_reset", payload: { resetAt } });
+
+      return { ok: true, resetAt };
+    }
+  );
 }

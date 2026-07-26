@@ -184,6 +184,12 @@ export function useServerEvents(
           case "bot_signal":
             setBotSignals((prev) => [parsed.payload, ...prev].slice(0, MAX_BOT_SIGNALS));
             break;
+          case "paper_trading_reset":
+            // 約定履歴・ポジション・Botシグナル履歴がサーバー側で全消去された
+            setPositions([]);
+            setTrades([]);
+            setBotSignals([]);
+            break;
         }
       };
     };
