@@ -66,7 +66,7 @@ export function PnlStatTiles({ summary }: { summary: PnlSummary }) {
         label="Realized / 実現損益"
         value={formatSignedJpy(realizedPnl)}
         valueColor={pnlColor(realizedPnl)}
-        sub={`${winCount + lossCount}回の決済`}
+        sub={`${winCount + lossCount}回の決済 / 手数料¥${Math.round(summary.totalFeesJpy).toLocaleString("ja-JP")}控除済`}
       />
       <StatTile
         label="Unrealized / 含み損益"

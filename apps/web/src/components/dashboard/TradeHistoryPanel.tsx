@@ -91,6 +91,11 @@ export function TradeHistoryPanel({ trades }: { trades: Trade[] }) {
                 数量 {trade.amount.toFixed(5)} BTC
               </Text>
             </HStack>
+            {trade.fee !== undefined && (
+              <Text fontSize="xs" color="text.disabled" fontFamily="mono" mt={0.5}>
+                手数料 {formatJpy(trade.fee)}
+              </Text>
+            )}
           </Box>
         );
       })}

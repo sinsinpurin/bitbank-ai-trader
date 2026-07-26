@@ -426,7 +426,7 @@ export default function DocsPage() {
                 <P>取引成績を分析するページです。全ペア・全系統の損益を合算して表示します。</P>
                 <DefTable
                   rows={[
-                    { term: "総損益", def: "実現損益(決済済み)+含み損益(保有中をペア別の現在値で評価)。" },
+                    { term: "総損益", def: "実現損益(決済済み)+含み損益(保有中をペア別の現在値で評価)。実現損益は手数料(taker 0.12%相当)とスリッページを控除したネット値で、実運用に近い数字になっています。含み損益は手数料控除前。" },
                     { term: "勝率", def: "決済済みポジションのうち利益で終えた割合。" },
                     { term: "Profit Factor", def: "総利益÷総損失。1.0超なら通算プラス。1.5以上が一つの目安。" },
                     { term: "最大DD", def: "最大ドローダウン。累積損益カーブの山から谷への最大下落幅。リスクの大きさを示します。" },
@@ -487,6 +487,8 @@ export default function DocsPage() {
                     { term: "AI_STOP_LOSS_PCT", def: "自動損切り率の既定値(%)。戦略別設定が優先。既定: 3" },
                     { term: "BOT_COOLDOWN_MS", def: "同一戦略の連続発火を防ぐ最短間隔(ms)。既定: 60000" },
                     { term: "CANDLE_SEED_DAYS", def: "起動時にbitbankから取得する1分足の日数(1〜7)。既定: 3" },
+                    { term: "TRADE_FEE_PCT", def: "ペーパートレードに反映する取引手数料(%)。bitbank現物taker相当。既定: 0.12" },
+                    { term: "TRADE_SLIPPAGE_PCT", def: "成行想定のスリッページ(%)。買いは高く・売りは安く約定させる。既定: 0.02" },
                   ]}
                 />
               </Stack>

@@ -18,7 +18,7 @@ const REASON_LABEL: Record<TradeReason, string> = {
   trailing_stop: "トレーリング",
 };
 
-const COLUMNS = "minmax(90px, 1fr) minmax(80px, 0.8fr) minmax(70px, 0.8fr) repeat(2, minmax(100px, 1fr)) minmax(90px, 0.9fr) minmax(70px, 0.8fr) minmax(100px, 1fr)";
+const COLUMNS = "minmax(90px, 1fr) minmax(80px, 0.8fr) minmax(70px, 0.8fr) repeat(2, minmax(100px, 1fr)) minmax(90px, 0.9fr) minmax(70px, 0.8fr) minmax(80px, 0.8fr) minmax(100px, 1fr)";
 
 function HeaderCell({ children, align = "left" }: { children: string; align?: "left" | "right" }) {
   return (
@@ -57,6 +57,7 @@ export function ClosedPositionsTable({ positions }: { positions: ClosedPositionR
           <HeaderCell align="right">決済値</HeaderCell>
           <HeaderCell align="right">数量 BTC</HeaderCell>
           <HeaderCell>理由</HeaderCell>
+          <HeaderCell align="right">手数料</HeaderCell>
           <HeaderCell align="right">損益</HeaderCell>
         </Grid>
 
@@ -97,6 +98,9 @@ export function ClosedPositionsTable({ positions }: { positions: ClosedPositionR
                 </Text>
                 <Text fontFamily="mono" fontSize="xs" color="text.secondary">
                   {position.closeReason ? REASON_LABEL[position.closeReason] : "--"}
+                </Text>
+                <Text fontFamily="mono" fontSize="xs" color="text.disabled" textAlign="right">
+                  {formatJpy(position.totalFeeJpy)}
                 </Text>
                 <Text fontFamily="mono" fontSize="xs" color={pnlColor(pnl)} textAlign="right">
                   {formatSignedJpy(pnl)}

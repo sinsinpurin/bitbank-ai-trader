@@ -87,6 +87,12 @@ export const config = {
     // 同一戦略が連続発火するのを防ぐ最短間隔
     cooldownMs: Number(process.env.BOT_COOLDOWN_MS ?? 60_000),
   },
+  fees: {
+    // ペーパートレードに反映する取引手数料(%)。bitbank現物のtaker手数料は0.12%
+    takerFeePct: Number(process.env.TRADE_FEE_PCT ?? 0.12),
+    // 成行想定のスリッページ(%)。買いは高く、売りは安く約定する
+    slippagePct: Number(process.env.TRADE_SLIPPAGE_PCT ?? 0.02),
+  },
   risk: {
     // 1ポジションあたりの上限金額(円)。この金額をもとに購入数量を算出する
     maxPositionJpy: Number(process.env.AI_MAX_POSITION_JPY ?? 30_000),

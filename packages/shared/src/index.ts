@@ -64,6 +64,8 @@ export interface Trade {
   executedAt: number;
   aiDecisionId: string | null;
   reason: TradeReason;
+  /** この約定で支払った手数料(円、シミュレーション値) */
+  fee?: number;
 }
 
 /** Claudeによる売買判断結果 */
@@ -284,6 +286,8 @@ export interface PnlReasonBreakdown {
 /** 決済済みポジション+決済理由 */
 export interface ClosedPositionRecord extends Position {
   closeReason: TradeReason | null;
+  /** 建玉+決済の合計手数料(円、シミュレーション値)。pnlは控除済み */
+  totalFeeJpy: number;
 }
 
 /** 戦略ごとの実現損益サマリ */
@@ -325,6 +329,8 @@ export interface PnlSummary {
   profitFactor: number | null;
   /** 累積実現損益カーブ上の最大ドローダウン(正の値) */
   maxDrawdown: number;
+  /** これまでに支払った手数料の合計(円、シミュレーション値)。realizedPnlは控除済み */
+  totalFeesJpy: number;
   balanceJpy: number;
   /** JPY以外の仮想残高(通貨コード→数量)。例: { btc: 0.003, eth: 0.1 } */
   assetBalances: Record<string, number>;

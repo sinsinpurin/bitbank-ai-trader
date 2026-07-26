@@ -41,6 +41,8 @@ model Position {
   trailingStopPct Float?
   // トレーリングストップ用の建玉後最高値
   highestPrice Float?
+  // 建玉時に支払った手数料(円)。決済時のpnl計算で控除する
+  entryFee Float @default(0)
 
   trades Trade[]
 }
@@ -56,6 +58,9 @@ model Trade {
 
   // 発注元のBot戦略(AI判断・自動損切り等の場合はnull)
   strategyId String?
+
+  // この約定で支払った手数料(円換算、taker想定のシミュレーション値)
+  fee Float @default(0)
 
   aiDecisionId String?
   aiDecision   AiDecisionLog? @relation(fields: [aiDecisionId], references: [id])

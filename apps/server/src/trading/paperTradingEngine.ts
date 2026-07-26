@@ -12,6 +12,20 @@ export function assetCurrencyOf(pair: string): string {
   return pair.split("_")[0];
 }
 
+/**
+ * 成行想定の約定価格(スリッページ反映)。買いは不利に高く、売りは不利に安く約定する。
+ * 実運用との乖離を減らすためのシミュレーションで、TRADE_SLIPPAGE_PCT で調整できる。
+ */
+function executionPrice(marketPrice: number, side: "buy" | "sell"): number {
+  const slip = config.fees.slippagePct / 100;
+  return side === "buy" ? marketPrice * (1 + slip) : marketPrice * (1 - slip);
+}
+
+/** 約定金額に対する手数料(円)。bitbank現物taker 0.12% 相当(TRADE_FEE_PCT) */
+function feeOf(notionalJpy: number): number {
+  return notionalJpy * (config.fees.takerFeePct / 100);
+}
+
 async function ensureInitialBalance(pair: string) {
   await prisma.virtualBalance.upsert({
     where: { currency: "jpy" },
@@ -51,13 +65,18 @@ export async function closePosition(
   aiDecisionLogId?: string,
   closedByStrategyId?: string
 ) {
-  const proceeds = currentPrice * position.amount;
-  const pnl = (currentPrice - position.entryPrice) * position.amount;
+  // スリッページ込みの約定価格で受渡し、手数料を差し引く。
+  // pnlは建玉手数料+決済手数料を控除したネット値(戦略評価を実運用に近づけるため)
+  const execPrice = executionPrice(currentPrice, "sell");
+  const proceeds = execPrice * position.amount;
+  const exitFee = feeOf(proceeds);
+  const pnl =
+    (execPrice - position.entryPrice) * position.amount - position.entryFee - exitFee;
 
   const [, , trade] = await prisma.$transaction([
     prisma.virtualBalance.update({
       where: { currency: "jpy" },
-      data: { amount: { increment: proceeds } },
+      data: { amount: { increment: proceeds - exitFee } },
     }),
     prisma.virtualBalance.update({
       where: { currency: assetCurrencyOf(position.pair) },
@@ -67,9 +86,10 @@ export async function closePosition(
       data: {
         pair: position.pair,
         side: "sell",
-        price: currentPrice,
+        price: execPrice,
         amount: position.amount,
         reason,
+        fee: exitFee,
         aiDecisionId: aiDecisionLogId,
         positionId: position.id,
         strategyId: closedByStrategyId ?? position.strategyId,
@@ -79,7 +99,7 @@ export async function closePosition(
 
   const updatedPosition = await prisma.position.update({
     where: { id: position.id },
-    data: { closedAt: new Date(), closePrice: currentPrice, pnl },
+    data: { closedAt: new Date(), closePrice: execPrice, pnl },
   });
 
   // サーキットブレーカー(日次損失・戦略連敗)の判定
@@ -153,22 +173,25 @@ export async function openBuyPosition(
     return { trade: null, position: null };
   }
 
+  // スリッページ込みの約定価格で建玉し、手数料は現金から追加で差し引く
+  const execPrice = executionPrice(currentPrice, "buy");
   const sizeJpy = options.sizeJpy ?? config.risk.maxPositionJpy;
-  const amount = sizeJpy / currentPrice;
-  const cost = currentPrice * amount;
+  const amount = sizeJpy / execPrice;
+  const cost = execPrice * amount;
+  const entryFee = feeOf(cost);
 
   const jpyBalance = await prisma.virtualBalance.findUniqueOrThrow({
     where: { currency: "jpy" },
   });
 
-  if (jpyBalance.amount < cost) {
+  if (jpyBalance.amount < cost + entryFee) {
     return { trade: null, position: null };
   }
 
   const [, , position, trade] = await prisma.$transaction([
     prisma.virtualBalance.update({
       where: { currency: "jpy" },
-      data: { amount: { decrement: cost } },
+      data: { amount: { decrement: cost + entryFee } },
     }),
     prisma.virtualBalance.update({
       where: { currency: assetCurrencyOf(pair) },
@@ -178,22 +201,24 @@ export async function openBuyPosition(
       data: {
         pair,
         side: "buy",
-        entryPrice: currentPrice,
+        entryPrice: execPrice,
         amount,
         strategyId: options.strategyId,
         stopLossPct: options.stopLossPct,
         takeProfitPct: options.takeProfitPct,
         trailingStopPct: options.trailingStopPct,
-        highestPrice: currentPrice,
+        highestPrice: execPrice,
+        entryFee,
       },
     }),
     prisma.trade.create({
       data: {
         pair,
         side: "buy",
-        price: currentPrice,
+        price: execPrice,
         amount,
         reason,
+        fee: entryFee,
         aiDecisionId: options.aiDecisionLogId,
         strategyId: options.strategyId,
       },

@@ -45,7 +45,7 @@ function closeReasonOf(trades: PrismaTrade[]): TradeReason | null {
 
 export async function pnlRoutes(app: FastifyInstance) {
   app.get("/api/pnl", async (): Promise<PnlSummary> => {
-    const [closedRows, openRows, balances] = await Promise.all([
+    const [closedRows, openRows, balances, feeAgg] = await Promise.all([
       prisma.position.findMany({
         where: { closedAt: { not: null } },
         orderBy: { closedAt: "asc" },
@@ -56,7 +56,9 @@ export async function pnlRoutes(app: FastifyInstance) {
         orderBy: { openedAt: "asc" },
       }),
       prisma.virtualBalance.findMany(),
+      prisma.trade.aggregate({ _sum: { fee: true } }),
     ]);
+    const totalFeesJpy = feeAgg._sum.fee ?? 0;
 
     // ペアごとの最新価格(1分足終値ベース)
     const currentPrices: Record<string, number> = {};
@@ -192,7 +194,11 @@ export async function pnlRoutes(app: FastifyInstance) {
     const closedPositions: ClosedPositionRecord[] = closedRows
       .slice(-MAX_CLOSED_POSITIONS)
       .reverse()
-      .map((row) => ({ ...toPositionDto(row), closeReason: closeReasonOf(row.trades) }));
+      .map((row) => ({
+        ...toPositionDto(row),
+        closeReason: closeReasonOf(row.trades),
+        totalFeeJpy: row.trades.reduce((sum, t) => sum + t.fee, 0),
+      }));
 
     return {
       currentPrices,
@@ -206,6 +212,7 @@ export async function pnlRoutes(app: FastifyInstance) {
       avgLoss: lossCount > 0 ? -(grossLoss / lossCount) : null,
       profitFactor: grossLoss > 0 ? grossProfit / grossLoss : null,
       maxDrawdown,
+      totalFeesJpy,
       balanceJpy,
       assetBalances,
       equityJpy,
