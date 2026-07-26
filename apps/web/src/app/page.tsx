@@ -3,6 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Box, Grid, GridItem, HStack, Text } from "@chakra-ui/react";
 import type { SeriesMarker, Time, UTCTimestamp } from "lightweight-charts";
+import {
+  CANDLE_TIMEFRAMES,
+  DEFAULT_CANDLE_TIMEFRAME,
+  minutesOfTimeframe,
+  type CandleTimeframe,
+} from "@bitbank-ai-trader/shared";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { CyberPanel } from "@/components/ui/CyberPanel";
 import { CyberButton } from "@/components/ui/CyberButton";
@@ -28,8 +34,9 @@ export default function DashboardPage() {
     }
   }, [pairs, primaryPair, selectedPair]);
 
+  const [timeframe, setTimeframe] = useState<CandleTimeframe>(DEFAULT_CANDLE_TIMEFRAME);
   const { connected, candles, aiDecisions, positions, trades, usage, botSignals } =
-    useServerEvents([], selectedPair);
+    useServerEvents([], selectedPair, timeframe);
   const [showTradeMarkers, setShowTradeMarkers] = useState(true);
   const [showSignalMarkers, setShowSignalMarkers] = useState(true);
 
@@ -44,10 +51,11 @@ export default function DashboardPage() {
     [displayPositions, selectedPair]
   );
 
-  // チャートマーカー: 約定(▲買い/▼売り)+ 見送りシグナル(●)。1分足のバケットに合わせる
+  // チャートマーカー: 約定(▲買い/▼売り)+ 見送りシグナル(●)。選択中の時間足のバケットに合わせる
   const chartMarkers = useMemo<SeriesMarker<Time>[]>(() => {
     const markers: SeriesMarker<Time>[] = [];
-    const bucket = (ms: number) => (Math.floor(ms / 60_000) * 60) as UTCTimestamp;
+    const bucketMs = minutesOfTimeframe(timeframe) * 60_000;
+    const bucket = (ms: number) => (Math.floor(ms / bucketMs) * (bucketMs / 1000)) as UTCTimestamp;
 
     if (showTradeMarkers) {
       for (const trade of trades) {
@@ -75,7 +83,7 @@ export default function DashboardPage() {
       }
     }
     return markers.sort((a, b) => (a.time as number) - (b.time as number));
-  }, [trades, botSignals, selectedPair, showTradeMarkers, showSignalMarkers]);
+  }, [trades, botSignals, selectedPair, showTradeMarkers, showSignalMarkers, timeframe]);
 
   return (
     <Box minH="100vh">
@@ -105,7 +113,24 @@ export default function DashboardPage() {
               accent="cyan"
               delay={0}
             >
-              <HStack gap={2} mb={2}>
+              <HStack gap={2} mb={2} flexWrap="wrap">
+                <Text fontFamily="mono" fontSize="10px" color="text.disabled">
+                  TF:
+                </Text>
+                {CANDLE_TIMEFRAMES.map((tf) => (
+                  <CyberButton
+                    key={tf.value}
+                    size="sm"
+                    px={3}
+                    py={1}
+                    variant={timeframe === tf.value ? "secondary" : "ghost"}
+                    onClick={() => setTimeframe(tf.value)}
+                  >
+                    {tf.label}
+                  </CyberButton>
+                ))}
+              </HStack>
+              <HStack gap={2} mb={2} flexWrap="wrap">
                 <Text fontFamily="mono" fontSize="10px" color="text.disabled">
                   MARKERS:
                 </Text>

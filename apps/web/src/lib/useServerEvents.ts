@@ -2,13 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { CandlestickData, UTCTimestamp } from "lightweight-charts";
-import type {
-  AiDecision,
-  AiUsageStats,
-  BotSignal,
-  Position,
-  ServerEvent,
-  Trade,
+import {
+  minutesOfTimeframe,
+  type AiDecision,
+  type AiUsageStats,
+  type BotSignal,
+  type CandleTimeframe,
+  type Position,
+  type ServerEvent,
+  type Trade,
 } from "@bitbank-ai-trader/shared";
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:4000/ws";
@@ -17,13 +19,17 @@ const RECONNECT_DELAY_MS = 3000;
 const MAX_DECISIONS = 20;
 const MAX_TRADES = 30;
 const MAX_BOT_SIGNALS = 20;
+// ブラウザ側で保持するローソク足の上限本数。時間足を問わずここで頭打ちにし、
+// 長時間画面を開きっぱなしにしてもメモリが際限なく増えないようにする(サーバー側の上限と揃える)
+const MAX_CANDLES = 1500;
 
 function applyTickerToCandles(
   candles: CandlestickData[],
   last: number,
-  timestampMs: number
+  timestampMs: number,
+  bucketSeconds: number
 ): CandlestickData[] {
-  const bucketTime = (Math.floor(timestampMs / 1000 / 60) * 60) as UTCTimestamp;
+  const bucketTime = (Math.floor(timestampMs / 1000 / bucketSeconds) * bucketSeconds) as UTCTimestamp;
   const next = candles.slice();
   const lastCandle = next[next.length - 1];
 
@@ -39,15 +45,21 @@ function applyTickerToCandles(
     };
   }
 
-  return next;
+  return next.length > MAX_CANDLES ? next.slice(-MAX_CANDLES) : next;
 }
 
 /**
  * サーバーWSのイベントを購読する。
  * candlePairを指定すると、そのペアのローソク足のみを蓄積し、
- * 切り替え時にはサーバーの1分足履歴(/api/candles)でプレフィルする。
+ * 切り替え時にはサーバーの集計済み履歴(/api/candles)でプレフィルする。
+ * timeframeは1分足バッファをサーバー側で集計したもので、切り替えても
+ * 新規のフェッチ量・保持件数はMAX_CANDLESの範囲に収まる。
  */
-export function useServerEvents(seedCandles: CandlestickData[], candlePair?: string) {
+export function useServerEvents(
+  seedCandles: CandlestickData[],
+  candlePair?: string,
+  timeframe: CandleTimeframe = "1min"
+) {
   const [connected, setConnected] = useState(false);
   const [candles, setCandles] = useState<CandlestickData[]>(seedCandles);
   const [aiDecisions, setAiDecisions] = useState<AiDecision[]>([]);
@@ -58,13 +70,15 @@ export function useServerEvents(seedCandles: CandlestickData[], candlePair?: str
   const seedRef = useRef(seedCandles);
   const candlePairRef = useRef(candlePair);
   candlePairRef.current = candlePair;
+  const bucketSecondsRef = useRef(minutesOfTimeframe(timeframe) * 60);
+  bucketSecondsRef.current = minutesOfTimeframe(timeframe) * 60;
 
-  // ペア切り替え時: 履歴をリセットし、サーバーの1分足終値でプレフィルする
+  // ペア・時間足切り替え時: 履歴をリセットし、サーバーの集計済み終値でプレフィルする
   useEffect(() => {
     if (!candlePair) return;
     let cancelled = false;
     setCandles([]);
-    fetch(`${API_URL}/api/candles?pair=${candlePair}`)
+    fetch(`${API_URL}/api/candles?pair=${candlePair}&timeframe=${timeframe}`)
       .then((res) => (res.ok ? res.json() : null))
       .then(
         (
@@ -92,7 +106,7 @@ export function useServerEvents(seedCandles: CandlestickData[], candlePair?: str
     return () => {
       cancelled = true;
     };
-  }, [candlePair]);
+  }, [candlePair, timeframe]);
 
   useEffect(() => {
     let cancelled = false;
@@ -141,7 +155,12 @@ export function useServerEvents(seedCandles: CandlestickData[], candlePair?: str
             // 表示対象ペア以外のtickerはローソク足へ混ぜない
             if (candlePairRef.current && parsed.payload.pair !== candlePairRef.current) break;
             setCandles((prev) =>
-              applyTickerToCandles(prev, parsed.payload.last, parsed.payload.timestamp)
+              applyTickerToCandles(
+                prev,
+                parsed.payload.last,
+                parsed.payload.timestamp,
+                bucketSecondsRef.current
+              )
             );
             break;
           case "ai_decision":

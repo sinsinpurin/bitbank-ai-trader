@@ -7,8 +7,10 @@ import { isBuyHalted } from "../trading/circuitBreaker";
 import { toPositionEvent, toTradeEvent } from "../trading/mappers";
 import {
   evaluateGraph,
+  minutesOfTimeframe,
   parseGraph,
   type BotSignal,
+  type CandleTimeframe,
   type OrderSide,
   type StrategyGraph,
 } from "@bitbank-ai-trader/shared";
@@ -19,7 +21,7 @@ import {
  * 条件の立ち上がり(false→true)でペーパートレードを執行する。
  */
 
-interface CandleBucket {
+export interface CandleBucket {
   time: number; // 分単位のエポック秒
   open: number;
   high: number;
@@ -29,6 +31,8 @@ interface CandleBucket {
 
 // 保持する1分足の本数(シード日数分+バッファ)
 const HISTORY_LIMIT = config.candles.seedDays * 1440 + 120;
+// 1レスポンスで返す上限本数(粗い時間足でもブラウザ側のメモリ・描画負荷を一定に保つ)
+const MAX_RESPONSE_CANDLES = 1500;
 
 interface PairCandleState {
   // 確定済みの1分足終値。末尾に「形成中の現在値」を加えた配列で評価する
@@ -148,6 +152,41 @@ export function getCandleHistory(pair: string): CandleBucket[] {
   const series = [...state.closed];
   if (state.forming) series.push(state.forming);
   return series;
+}
+
+/** 1分足を指定分数のバケットへ集計する(末尾バケットは形成中でも良い) */
+function aggregateCandles(source: CandleBucket[], minutes: number): CandleBucket[] {
+  if (minutes <= 1) return source;
+  const bucketSeconds = minutes * 60;
+  const result: CandleBucket[] = [];
+
+  for (const candle of source) {
+    const bucketTime = Math.floor(candle.time / bucketSeconds) * bucketSeconds;
+    const last = result[result.length - 1];
+    if (!last || last.time !== bucketTime) {
+      result.push({ time: bucketTime, open: candle.open, high: candle.high, low: candle.low, close: candle.close });
+    } else {
+      last.high = Math.max(last.high, candle.high);
+      last.low = Math.min(last.low, candle.low);
+      last.close = candle.close;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * 指定ペア・時間足のローソク足履歴を返す。
+ * 既に保持している1分足の有限バッファ(HISTORY_LIMIT本)を集計するだけなので、
+ * 時間足を切り替えても新規のフェッチやサーバー側メモリの増加は発生しない。
+ * レスポンスはMAX_RESPONSE_CANDLES本に切り詰め、ブラウザ側の負荷も一定に保つ。
+ */
+export function getCandlesForTimeframe(pair: string, timeframe: CandleTimeframe): CandleBucket[] {
+  const minutes = minutesOfTimeframe(timeframe);
+  const aggregated = aggregateCandles(getCandleHistory(pair), minutes);
+  return aggregated.length > MAX_RESPONSE_CANDLES
+    ? aggregated.slice(-MAX_RESPONSE_CANDLES)
+    : aggregated;
 }
 
 /** DBからアクティブ戦略を読み直す。戦略の作成・更新・有効化時に呼ぶ */

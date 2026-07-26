@@ -12,7 +12,7 @@ import {
   registerOnStrategiesChanged,
 } from "./trading/circuitBreaker";
 import {
-  getCandleHistory,
+  getCandlesForTimeframe,
   onTick,
   reloadActiveStrategies,
   seedCandleHistory,
@@ -21,7 +21,11 @@ import { strategyRoutes } from "./strategy/routes";
 import { pnlRoutes } from "./pnl/routes";
 import { settingsRoutes } from "./settings/routes";
 import { signalRoutes } from "./signals/routes";
-import type { Trade } from "@bitbank-ai-trader/shared";
+import {
+  DEFAULT_CANDLE_TIMEFRAME,
+  isCandleTimeframe,
+  type Trade,
+} from "@bitbank-ai-trader/shared";
 
 async function main() {
   const app = Fastify({ logger: true });
@@ -61,22 +65,30 @@ async function main() {
     primaryPair: config.targetPair,
   }));
 
-  // Bot/エディタ共用の1分足終値履歴(エディタのライブ評価に使う)
-  app.get<{ Querystring: { pair?: string } }>("/api/candles", async (request, reply) => {
-    const pair = request.query.pair ?? config.targetPair;
-    if (!config.targetPairs.includes(pair)) {
-      return reply.status(400).send({ error: `未対応のペアです: ${pair}` });
+  // Bot/エディタ/Webチャート共用のローソク足履歴(1分足バッファをtimeframeへ集計して返す)
+  app.get<{ Querystring: { pair?: string; timeframe?: string } }>(
+    "/api/candles",
+    async (request, reply) => {
+      const pair = request.query.pair ?? config.targetPair;
+      if (!config.targetPairs.includes(pair)) {
+        return reply.status(400).send({ error: `未対応のペアです: ${pair}` });
+      }
+      const timeframe = request.query.timeframe ?? DEFAULT_CANDLE_TIMEFRAME;
+      if (!isCandleTimeframe(timeframe)) {
+        return reply.status(400).send({ error: `未対応の時間足です: ${timeframe}` });
+      }
+      const candles = getCandlesForTimeframe(pair, timeframe);
+      return {
+        pair,
+        timeframe,
+        times: candles.map((c) => c.time),
+        opens: candles.map((c) => c.open),
+        highs: candles.map((c) => c.high),
+        lows: candles.map((c) => c.low),
+        closes: candles.map((c) => c.close),
+      };
     }
-    const candles = getCandleHistory(pair);
-    return {
-      pair,
-      times: candles.map((c) => c.time),
-      opens: candles.map((c) => c.open),
-      highs: candles.map((c) => c.high),
-      lows: candles.map((c) => c.low),
-      closes: candles.map((c) => c.close),
-    };
-  });
+  );
 
   await app.register(strategyRoutes);
   await app.register(pnlRoutes);

@@ -7,6 +7,37 @@ export type OrderSide = "buy" | "sell";
 
 export type AiAction = "buy" | "sell" | "hold";
 
+/** チャートの時間足。分足はサーバーの1分足バッファを集計して生成する */
+export type CandleTimeframe = "1min" | "5min" | "15min" | "30min" | "1hour" | "4hour" | "1day";
+
+export interface CandleTimeframeOption {
+  value: CandleTimeframe;
+  label: string;
+  /** 1本あたりの分数(集計バケットサイズ) */
+  minutes: number;
+}
+
+/** UIの時間足セレクタ・サーバー集計の両方が参照する定義(表示順) */
+export const CANDLE_TIMEFRAMES: CandleTimeframeOption[] = [
+  { value: "1min", label: "1分", minutes: 1 },
+  { value: "5min", label: "5分", minutes: 5 },
+  { value: "15min", label: "15分", minutes: 15 },
+  { value: "30min", label: "30分", minutes: 30 },
+  { value: "1hour", label: "1時間", minutes: 60 },
+  { value: "4hour", label: "4時間", minutes: 240 },
+  { value: "1day", label: "1日", minutes: 1440 },
+];
+
+export const DEFAULT_CANDLE_TIMEFRAME: CandleTimeframe = "1min";
+
+export function minutesOfTimeframe(timeframe: CandleTimeframe): number {
+  return CANDLE_TIMEFRAMES.find((t) => t.value === timeframe)?.minutes ?? 1;
+}
+
+export function isCandleTimeframe(value: string): value is CandleTimeframe {
+  return CANDLE_TIMEFRAMES.some((t) => t.value === value);
+}
+
 /** bitbank Public Stream の ticker_{pair} イベントを正規化したもの */
 export interface Ticker {
   pair: Pair;
