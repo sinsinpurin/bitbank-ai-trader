@@ -87,6 +87,15 @@ export function describeGraph(graph: StrategyGraph): GraphDescription {
           const joined = `${a}、${op === "and" ? "かつ" : "または"} ${b}`;
           return nested ? `(${joined})` : joined;
         }
+        case "ai_judgment": {
+          const expect = String(node.params.expect ?? "buy") === "buy" ? "買い" : "売り";
+          const minConfidence = node.params.minConfidence;
+          const confText =
+            minConfidence !== undefined
+              ? `(確信度${Math.round(Number(minConfidence) * 100)}%以上)`
+              : "";
+          return `AIが${expect}と判断する${confText}`;
+        }
         case "buy":
         case "sell":
           return describe(sourceNode(node.id, "condition"), visited, nested);

@@ -5,11 +5,10 @@ import { Box, Grid, GridItem, HStack } from "@chakra-ui/react";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { CyberPanel } from "@/components/ui/CyberPanel";
 import { CyberButton } from "@/components/ui/CyberButton";
-import { AiLogPanel } from "@/components/dashboard/AiLogPanel";
 import { PositionsPanel } from "@/components/dashboard/PositionsPanel";
 import { TradeHistoryPanel } from "@/components/dashboard/TradeHistoryPanel";
 import { StatusMeter } from "@/components/dashboard/StatusMeter";
-import { mockAiDecisions, mockPositions, mockTrades } from "@/lib/mockData";
+import { mockPositions, mockTrades } from "@/lib/mockData";
 import { useServerEvents } from "@/lib/useServerEvents";
 import { pairLabel, usePairs } from "@/lib/pairs";
 
@@ -25,14 +24,10 @@ export default function DashboardPage() {
   }, [pairs, primaryPair, selectedPair]);
 
   // チャートは表示しないが、含み損益の評価には現在値が必要なので1分足のみ購読する
-  const { connected, candles, aiDecisions, positions, trades, usage } = useServerEvents(
-    [],
-    selectedPair
-  );
+  const { connected, candles, positions, trades, usage } = useServerEvents([], selectedPair);
 
   // 未接続時のみダミーの初期シードデータを見せる。接続済みなら0件でもそのまま表示する
   // (リセット直後など、正当な0件をダミーデータと誤表示しないため)
-  const displayDecisions = connected ? aiDecisions : mockAiDecisions;
   const displayPositions = connected ? positions : mockPositions;
   const displayTrades = connected ? trades : mockTrades;
   const currentPrice = candles[candles.length - 1]?.close ?? 0;
@@ -88,13 +83,7 @@ export default function DashboardPage() {
           </GridItem>
 
           <GridItem>
-            <CyberPanel title="AI Decision Log" code="03 / LOG" accent="cyan" delay={0.1}>
-              <AiLogPanel decisions={displayDecisions} />
-            </CyberPanel>
-          </GridItem>
-
-          <GridItem colSpan={{ base: 1, xl: 2 }}>
-            <CyberPanel title="Trade History" code="04 / EXEC" accent="cyan" delay={0.15}>
+            <CyberPanel title="Trade History" code="03 / EXEC" accent="cyan" delay={0.1}>
               <TradeHistoryPanel trades={displayTrades} />
             </CyberPanel>
           </GridItem>

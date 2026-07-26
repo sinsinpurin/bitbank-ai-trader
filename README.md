@@ -57,7 +57,7 @@ AIが常に固定量で取引し続けて資産を溶かさないよう、`apps/
 ```bash
 npm run dev          # サーバー(:4000)+ダッシュボード(:3000)を同時起動(concurrently)
 # もしくは個別に起動する場合
-npm run dev:server   # http://localhost:4000 (Fastify + WebSocket + AI判断ループ)
+npm run dev:server   # http://localhost:4000 (Fastify + WebSocket + Bot戦略エンジン)
 npm run dev:web      # http://localhost:3000 (ダッシュボード)
 ```
 
@@ -79,7 +79,9 @@ npm run start:web
 ## 現状の範囲
 
 - 取引は**ペーパートレードのみ**。実際の注文APIは呼び出さず、SQLiteに仮想残高・仮想ポジション・約定履歴を記録する。
-- bitbank Public Stream(`wss://stream.bitbank.cc`, socket.io)からBTC/JPYのtickerをリアルタイム購読し、一定間隔でClaudeに相場サマリを渡して買い/売り/様子見の判断を取得する。
+- 売買はBot Blueprint(ノードエディタで組む戦略グラフ)経由でのみ実行される。SMA/RSIなどの技術的条件に加え、
+  「AI Judgment」ノードでClaudeによる売買判断(buy/sell/hold)を条件の一部として組み込める
+  (低頻度・コスト管理付きでキャッシュされ、新しい判断が届いた瞬間だけ発火する)。
 - ポジションサイズ上限・同時保有数上限・自動損切りによるリスク管理(`AI_MAX_POSITION_JPY` / `AI_MAX_OPEN_POSITIONS` / `AI_STOP_LOSS_PCT`)。損切りは全tickerで評価され、AI呼び出し(課金)は発生しない。
-- `apps/web`のダッシュボードはサーバーのWebSocket(`/ws`)に接続し、ticker/AI判断/ポジション更新/約定/AI利用状況をリアルタイム表示する。約定履歴は`GET /api/trades`で初期取得後、WebSocketで追記される。未接続時は初期シードのダミーデータを表示する。
+- `apps/web`のダッシュボードはサーバーのWebSocket(`/ws`)に接続し、ticker/ポジション更新/約定/AI利用状況をリアルタイム表示する。約定履歴は`GET /api/trades`で初期取得後、WebSocketで追記される。未接続時は初期シードのダミーデータを表示する。
 - UIテーマは Cyberpunk 2077 の UI カラーパレット(黒 `#000000` / 黄 `#f3e600` / シアン `#55ead4` / 深紅 `#c5003c` / 暗赤 `#880425`)を採用。

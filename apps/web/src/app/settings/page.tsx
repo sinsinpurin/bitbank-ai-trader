@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { SettingsResponse } from "@bitbank-ai-trader/shared";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { CyberPanel } from "@/components/ui/CyberPanel";
-import { AiLoopControlPanel } from "@/components/settings/AiLoopControlPanel";
+import { AiJudgmentControlPanel } from "@/components/settings/AiJudgmentControlPanel";
 import { CircuitBreakerPanel } from "@/components/settings/CircuitBreakerPanel";
 import { PaperTradingResetPanel } from "@/components/settings/PaperTradingResetPanel";
 import { UsageSummaryTiles } from "@/components/settings/UsageSummaryTiles";
@@ -65,12 +65,12 @@ export default function SettingsPage() {
         {data && (
           <Grid templateColumns={{ base: "1fr", xl: "1fr 2fr" }} gap={6}>
             <GridItem>
-              <CyberPanel title="AI Decision Loop" code="01 / CTRL" accent="red" delay={0}>
-                <AiLoopControlPanel
-                  enabled={data.settings.aiDecisionEnabled}
+              <CyberPanel title="AI Judgment" code="01 / CTRL" accent="red" delay={0}>
+                <AiJudgmentControlPanel
+                  enabled={data.settings.aiJudgmentEnabled}
                   usage={data.usage}
                   saving={saving}
-                  onToggle={(next) => handleUpdate({ aiDecisionEnabled: next })}
+                  onToggle={(next) => handleUpdate({ aiJudgmentEnabled: next })}
                 />
               </CyberPanel>
             </GridItem>

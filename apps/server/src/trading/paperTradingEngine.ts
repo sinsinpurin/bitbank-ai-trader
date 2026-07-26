@@ -1,6 +1,5 @@
 import { prisma } from "../db/prisma";
 import { config } from "../config";
-import type { AiDecisionResult } from "../ai/claudeService";
 import type { Position } from "@prisma/client";
 import type { TradeReason } from "@bitbank-ai-trader/shared";
 import { isBuyHalted, onPositionClosed } from "./circuitBreaker";
@@ -247,25 +246,4 @@ export async function openBuyPosition(
   ]);
 
   return { trade, position };
-}
-
-/**
- * AIの判断(buy/sell/hold)を受け取り、仮想残高・ポジション・約定履歴を更新する。
- * 実際の注文APIへの発注は一切行わない。
- */
-export async function applyAiDecision(
-  pair: string,
-  currentPrice: number,
-  decision: AiDecisionResult,
-  aiDecisionLogId: string
-) {
-  if (decision.action === "hold") {
-    return { trade: null, position: null };
-  }
-
-  if (decision.action === "sell") {
-    return closeOldestPosition(pair, currentPrice, "ai_decision", { aiDecisionLogId });
-  }
-
-  return openBuyPosition(pair, currentPrice, "ai_decision", { aiDecisionLogId });
 }

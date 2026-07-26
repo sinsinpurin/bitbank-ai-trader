@@ -50,6 +50,7 @@ import { NODE_CATALOG, NODE_DEF_BY_TYPE, type PortKind } from "@/components/stra
 import { LiveValuesContext } from "@/components/strategy/LiveValuesContext";
 import { createStrategy, deleteStrategy, fetchStrategies, updateStrategy } from "@/lib/strategyApi";
 import { useLiveCandles } from "@/lib/useLiveCandles";
+import { useAiJudgment } from "@/lib/useAiJudgment";
 import { useServerEvents } from "@/lib/useServerEvents";
 import { pairLabel, usePairs } from "@/lib/pairs";
 
@@ -301,10 +302,20 @@ function StrategyEditor() {
 
   // 現在の相場データ(選択ペアの1分足履歴)で各ノードを評価し、◯/✕・数値をライブ表示する
   const closes = useLiveCandles(pair);
+  // AI Judgmentノードのライブプレビュー用(このペアの最新AI判断キャッシュを15秒間隔で取得)
+  const aiJudgment = useAiJudgment(pair);
   const liveValues = useMemo<Record<string, NodeLiveValue> | null>(() => {
     if (closes.length < 2) return null;
-    return evaluateGraph(toGraph(nodes, edges), closes, { collectValues: true }).nodeValues;
-  }, [nodes, edges, closes]);
+    return evaluateGraph(toGraph(nodes, edges), closes, {
+      collectValues: true,
+      // プレビュー表示のみに使うため、立ち上がりエッジ検出(isFresh)は問わず現在値をそのまま見せる
+      aiJudgment: aiJudgment && {
+        action: aiJudgment.action,
+        confidence: aiJudgment.confidence,
+        isFresh: true,
+      },
+    }).nodeValues;
+  }, [nodes, edges, closes, aiJudgment]);
 
   const handleLoadTemplate = useCallback(
     (template: StrategyTemplate) => {
@@ -500,6 +511,16 @@ function StrategyEditor() {
               ? `LIVE: ${pairLabel(pair)} 1分足×${closes.length}本で各ノードを評価中(10秒ごと更新)`
               : "LIVE評価は停止中(サーバー未接続またはデータ蓄積中)"}
           </Text>
+
+          {nodes.some((n) => n.type === "ai_judgment") && (
+            <Text fontFamily="mono" fontSize="10px" color="text.disabled">
+              {aiJudgment
+                ? `AI JUDGMENT: ${pairLabel(pair)} ${aiJudgment.action.toUpperCase()} (確信度${Math.round(
+                    aiJudgment.confidence * 100
+                  )}%, ${new Date(aiJudgment.updatedAt).toLocaleTimeString("ja-JP", { hour12: false })}時点)`
+                : "AI JUDGMENT: まだ判断がありません(戦略をDeployすると数分以内に初回取得されます)"}
+            </Text>
+          )}
 
           <CyberPanel title="Strategy Preview" code="02 / 意訳" accent="cyan" collapsible>
             <StrategyPreview description={preview} />

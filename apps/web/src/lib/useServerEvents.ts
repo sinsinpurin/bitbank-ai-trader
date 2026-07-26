@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import type { CandlestickData, UTCTimestamp } from "lightweight-charts";
 import {
   minutesOfTimeframe,
-  type AiDecision,
   type AiUsageStats,
   type BotSignal,
   type CandleTimeframe,
@@ -16,7 +15,6 @@ import {
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:4000/ws";
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 const RECONNECT_DELAY_MS = 3000;
-const MAX_DECISIONS = 20;
 const MAX_TRADES = 30;
 const MAX_BOT_SIGNALS = 20;
 // ブラウザ側で保持するローソク足の上限本数。時間足を問わずここで頭打ちにし、
@@ -62,7 +60,6 @@ export function useServerEvents(
 ) {
   const [connected, setConnected] = useState(false);
   const [candles, setCandles] = useState<CandlestickData[]>(seedCandles);
-  const [aiDecisions, setAiDecisions] = useState<AiDecision[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
   const [trades, setTrades] = useState<Trade[]>([]);
   const [usage, setUsage] = useState<AiUsageStats | null>(null);
@@ -163,9 +160,6 @@ export function useServerEvents(
               )
             );
             break;
-          case "ai_decision":
-            setAiDecisions((prev) => [parsed.payload, ...prev].slice(0, MAX_DECISIONS));
-            break;
           case "position_update":
             setPositions((prev) => {
               const idx = prev.findIndex((p) => p.id === parsed.payload.id);
@@ -206,7 +200,6 @@ export function useServerEvents(
   return {
     connected,
     candles: candles.length > 0 ? candles : seedRef.current,
-    aiDecisions,
     positions,
     trades,
     usage,

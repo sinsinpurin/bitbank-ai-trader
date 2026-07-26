@@ -8,7 +8,7 @@ import type {
 import { prisma } from "../db/prisma";
 import { config } from "../config";
 import { estimateCostJpy } from "../ai/pricing";
-import { isAiDecisionEnabled, setAiDecisionEnabled } from "../ai/decisionLoop";
+import { isAiJudgmentEnabled, setAiJudgmentEnabled } from "../ai/aiJudgment";
 import {
   getCircuitBreakerSettings,
   getCircuitBreakerStatus,
@@ -18,7 +18,7 @@ import {
 import { resetPaperTrading } from "../trading/paperTradingEngine";
 import { broadcast } from "../ws/relay";
 
-const AI_DECISION_ENABLED_KEY = "aiDecisionEnabled";
+const AI_JUDGMENT_ENABLED_KEY = "aiJudgmentEnabled";
 const USAGE_DAYS = 30;
 
 /** JST基準の日付キー("YYYY-MM-DD") */
@@ -33,11 +33,11 @@ function jstTodayBoundary(): Date {
   return new Date(jstMidnight - 9 * 60 * 60 * 1000);
 }
 
-/** 起動時に永続化された設定をdecisionLoopへ反映する */
+/** 起動時に永続化された設定をaiJudgmentへ反映する */
 async function loadPersistedSettings() {
-  const row = await prisma.appSetting.findUnique({ where: { key: AI_DECISION_ENABLED_KEY } });
+  const row = await prisma.appSetting.findUnique({ where: { key: AI_JUDGMENT_ENABLED_KEY } });
   if (row) {
-    setAiDecisionEnabled(row.value === "true");
+    setAiJudgmentEnabled(row.value === "true");
   }
 }
 
@@ -121,7 +121,7 @@ async function buildUsageSummary(): Promise<AiUsageSummary> {
 function currentSettings(): AppSettings {
   const breaker = getCircuitBreakerSettings();
   return {
-    aiDecisionEnabled: isAiDecisionEnabled(),
+    aiJudgmentEnabled: isAiJudgmentEnabled(),
     circuitBreakerEnabled: breaker.enabled,
     dailyMaxLossJpy: breaker.dailyMaxLossJpy,
     maxConsecutiveLosses: breaker.maxConsecutiveLosses,
@@ -142,7 +142,7 @@ export async function settingsRoutes(app: FastifyInstance) {
 
   app.put<{
     Body: {
-      aiDecisionEnabled?: boolean;
+      aiJudgmentEnabled?: boolean;
       circuitBreakerEnabled?: boolean;
       dailyMaxLossJpy?: number;
       maxConsecutiveLosses?: number;
@@ -153,7 +153,7 @@ export async function settingsRoutes(app: FastifyInstance) {
     const body = request.body ?? {};
 
     if (
-      body.aiDecisionEnabled === undefined &&
+      body.aiJudgmentEnabled === undefined &&
       body.circuitBreakerEnabled === undefined &&
       body.dailyMaxLossJpy === undefined &&
       body.maxConsecutiveLosses === undefined &&
@@ -163,16 +163,16 @@ export async function settingsRoutes(app: FastifyInstance) {
     }
 
     try {
-      if (body.aiDecisionEnabled !== undefined) {
-        if (typeof body.aiDecisionEnabled !== "boolean") {
-          return reply.status(400).send({ error: "aiDecisionEnabled はbooleanで指定してください" });
+      if (body.aiJudgmentEnabled !== undefined) {
+        if (typeof body.aiJudgmentEnabled !== "boolean") {
+          return reply.status(400).send({ error: "aiJudgmentEnabled はbooleanで指定してください" });
         }
         await prisma.appSetting.upsert({
-          where: { key: AI_DECISION_ENABLED_KEY },
-          update: { value: String(body.aiDecisionEnabled) },
-          create: { key: AI_DECISION_ENABLED_KEY, value: String(body.aiDecisionEnabled) },
+          where: { key: AI_JUDGMENT_ENABLED_KEY },
+          update: { value: String(body.aiJudgmentEnabled) },
+          create: { key: AI_JUDGMENT_ENABLED_KEY, value: String(body.aiJudgmentEnabled) },
         });
-        setAiDecisionEnabled(body.aiDecisionEnabled);
+        setAiJudgmentEnabled(body.aiJudgmentEnabled);
       }
 
       await updateCircuitBreakerSettings({

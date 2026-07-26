@@ -19,7 +19,7 @@ export async function fetchSettings(): Promise<SettingsResponse> {
 }
 
 export interface UpdateSettingsInput {
-  aiDecisionEnabled?: boolean;
+  aiJudgmentEnabled?: boolean;
   circuitBreakerEnabled?: boolean;
   dailyMaxLossJpy?: number;
   maxConsecutiveLosses?: number;

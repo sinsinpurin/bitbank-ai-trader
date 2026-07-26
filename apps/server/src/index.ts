@@ -5,7 +5,7 @@ import { config } from "./config";
 import { prisma } from "./db/prisma";
 import { subscribeTickers } from "./bitbank/publicStream";
 import { registerClient, broadcast } from "./ws/relay";
-import { recordPrice, startDecisionLoop } from "./ai/decisionLoop";
+import { getJudgment, recordPrice, startAiJudgmentLoop } from "./ai/aiJudgment";
 import { checkExits } from "./trading/riskManager";
 import {
   loadCircuitBreakerState,
@@ -24,6 +24,7 @@ import { signalRoutes } from "./signals/routes";
 import {
   DEFAULT_CANDLE_TIMEFRAME,
   isCandleTimeframe,
+  type AiJudgment,
   type Trade,
 } from "@bitbank-ai-trader/shared";
 
@@ -90,6 +91,16 @@ async function main() {
     }
   );
 
+  // Bot Blueprintの「AI Judgment」ノードのライブ値表示・エディタのライブプレビュー用
+  app.get<{ Querystring: { pair?: string } }>("/api/ai-judgment", async (request, reply) => {
+    const pair = request.query.pair ?? config.targetPair;
+    if (!config.targetPairs.includes(pair)) {
+      return reply.status(400).send({ error: `未対応のペアです: ${pair}` });
+    }
+    const judgment: AiJudgment | null = getJudgment(pair);
+    return { pair, judgment };
+  });
+
   await app.register(strategyRoutes);
   await app.register(pnlRoutes);
   await app.register(settingsRoutes);
@@ -107,10 +118,8 @@ async function main() {
   await Promise.all(config.targetPairs.map((pair) => seedCandleHistory(pair)));
 
   subscribeTickers(config.targetPairs, (ticker) => {
-    // AI売買判断ループはメインペアのみ対象(ペア数分のClaude呼び出しコスト増を防ぐ)
-    if (ticker.pair === config.targetPair) {
-      recordPrice(ticker.last);
-    }
+    // ai_judgmentノードを使う戦略があるペアのみ内部で価格履歴を積む(それ以外は無視される)
+    recordPrice(ticker.pair, ticker.last);
     broadcast({ type: "ticker", payload: ticker });
     checkExits(ticker.pair, ticker.last).catch((err) =>
       app.log.error(err, "出口条件チェックに失敗しました")
@@ -120,12 +129,12 @@ async function main() {
     );
   });
 
-  const stopDecisionLoop = startDecisionLoop();
+  const stopAiJudgmentLoop = startAiJudgmentLoop();
 
   await app.listen({ port: config.port, host: "0.0.0.0" });
 
   process.on("SIGINT", () => {
-    stopDecisionLoop();
+    stopAiJudgmentLoop();
     app.close().finally(() => process.exit(0));
   });
 }

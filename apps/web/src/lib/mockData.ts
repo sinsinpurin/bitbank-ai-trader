@@ -1,5 +1,5 @@
 import type { CandlestickData, UTCTimestamp } from "lightweight-charts";
-import type { AiDecision, Position, Trade } from "@bitbank-ai-trader/shared";
+import type { Position, Trade } from "@bitbank-ai-trader/shared";
 
 /** ダミーのローソク足データ生成(BTC/JPY風の値動き) */
 export function generateMockCandles(count = 120): CandlestickData[] {
@@ -32,34 +32,6 @@ export function generateMockCandles(count = 120): CandlestickData[] {
 
   return candles;
 }
-
-export const mockAiDecisions: AiDecision[] = [
-  {
-    id: "1",
-    pair: "btc_jpy",
-    action: "buy",
-    confidence: 0.78,
-    reasoning:
-      "直近30分で安値圏からの反発を確認。出来高増加を伴っており短期的な上昇継続を予測。",
-    createdAt: 1_782_900_000_000,
-  },
-  {
-    id: "2",
-    pair: "btc_jpy",
-    action: "hold",
-    confidence: 0.55,
-    reasoning: "レンジ相場が継続中。明確なブレイクアウトが確認できるまで待機を推奨。",
-    createdAt: 1_782_900_060_000,
-  },
-  {
-    id: "3",
-    pair: "btc_jpy",
-    action: "sell",
-    confidence: 0.66,
-    reasoning: "上位足レジスタンス付近で失速。短期的な調整局面入りと判断。",
-    createdAt: 1_782_900_120_000,
-  },
-];
 
 export const mockPositions: Position[] = [
   {
