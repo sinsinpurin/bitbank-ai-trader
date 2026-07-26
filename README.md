@@ -55,6 +55,8 @@ AIが常に固定量で取引し続けて資産を溶かさないよう、`apps/
 ## 開発
 
 ```bash
+npm run dev          # サーバー(:4000)+ダッシュボード(:3000)を同時起動(concurrently)
+# もしくは個別に起動する場合
 npm run dev:server   # http://localhost:4000 (Fastify + WebSocket + AI判断ループ)
 npm run dev:web      # http://localhost:3000 (ダッシュボード)
 ```
@@ -63,6 +65,15 @@ npm run dev:web      # http://localhost:3000 (ダッシュボード)
 
 ```bash
 npm run build
+```
+
+## 本番起動
+
+```bash
+npm run start        # build後、サーバー(:4000)+ダッシュボード(:3000)をproductionモードで同時起動
+# もしくは個別に起動する場合(事前に npm run build が必要)
+npm run start:server
+npm run start:web
 ```
 
 ## 現状の範囲
