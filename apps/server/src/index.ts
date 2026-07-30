@@ -118,8 +118,8 @@ async function main() {
   await Promise.all(config.targetPairs.map((pair) => seedCandleHistory(pair)));
 
   subscribeTickers(config.targetPairs, (ticker) => {
-    // ai_judgmentノードを使う戦略があるペアのみ内部で価格履歴を積む(それ以外は無視される)
-    recordPrice(ticker.pair, ticker.last);
+    // ai_judgmentノードを使う戦略があるペアのみ内部で価格・出来高履歴を積む(それ以外は無視される)
+    recordPrice(ticker.pair, ticker.last, ticker.vol);
     broadcast({ type: "ticker", payload: ticker });
     checkExits(ticker.pair, ticker.last).catch((err) =>
       app.log.error(err, "出口条件チェックに失敗しました")

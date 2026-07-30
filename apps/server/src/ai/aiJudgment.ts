@@ -16,6 +16,8 @@ import type { AiJudgment, AiUsageStats } from "@bitbank-ai-trader/shared";
 
 const HISTORY_LIMIT = 20;
 const priceHistory = new Map<string, number[]>();
+// tickerの24時間出来高(bitbankのticker.volをそのまま保持。取得前はundefined)
+const latestVol = new Map<string, number>();
 const judgmentCache = new Map<string, AiJudgment>();
 const lastCallAt = new Map<string, number>();
 const lastCallPrice = new Map<string, number>();
@@ -39,12 +41,13 @@ export function setWatchedPairs(pairs: Set<string>) {
   watchedPairs = pairs;
 }
 
-export function recordPrice(pair: string, price: number) {
+export function recordPrice(pair: string, price: number, vol24h?: number) {
   if (!watchedPairs.has(pair)) return;
   const hist = priceHistory.get(pair) ?? [];
   hist.push(price);
   if (hist.length > HISTORY_LIMIT) hist.shift();
   priceHistory.set(pair, hist);
+  if (vol24h !== undefined) latestVol.set(pair, vol24h);
 }
 
 /** 指定ペアの最新AI判断キャッシュ(未取得ならnull) */
@@ -119,7 +122,7 @@ async function refreshPair(pair: string, now: number) {
     last,
     high24h: Math.max(...hist),
     low24h: Math.min(...hist),
-    vol24h: 0,
+    vol24h: latestVol.get(pair) ?? 0,
     recentPrices: [...hist],
   };
 
