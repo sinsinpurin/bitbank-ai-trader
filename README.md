@@ -97,3 +97,7 @@ npm run test:coverage   # カバレッジ計測付きで実行(各ワークス�
 - ポジションサイズ上限・同時保有数上限・自動損切りによるリスク管理(`AI_MAX_POSITION_JPY` / `AI_MAX_OPEN_POSITIONS` / `AI_STOP_LOSS_PCT`)。損切りは全tickerで評価され、AI呼び出し(課金)は発生しない。
 - `apps/web`のダッシュボードはサーバーのWebSocket(`/ws`)に接続し、ticker/ポジション更新/約定/AI利用状況をリアルタイム表示する。約定履歴は`GET /api/trades`で初期取得後、WebSocketで追記される。未接続時は初期シードのダミーデータを表示する。
 - UIテーマは Cyberpunk 2077 の UI カラーパレット(黒 `#000000` / 黄 `#f3e600` / シアン `#55ead4` / 深紅 `#c5003c` / 暗赤 `#880425`)を採用。
+
+## ライセンス
+
+[MIT](./LICENSE)
