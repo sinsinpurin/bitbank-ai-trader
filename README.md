@@ -100,4 +100,5 @@ npm run test:coverage   # カバレッジ計測付きで実行(各ワークス�
 
 ## ライセンス
 
-[MIT](./LICENSE)
+[CC BY-NC 4.0](./LICENSE)(表示-非営利)。著作者(sinsinpurin)のクレジット表示を条件に、
+個人利用・改変・再配布は自由。商用利用は不可。
