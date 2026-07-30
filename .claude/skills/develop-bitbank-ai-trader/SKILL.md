@@ -80,17 +80,40 @@ migration. Never hand-edit an already-applied migration; add a new one.
 
 ## Verifying a change
 
-There's no test framework (`grep '"test"' apps/*/package.json` finds
-nothing). Two verification paths exist, pick based on what you changed:
+Vitest is set up in all three workspaces (`npm run test` / `npm run
+test:coverage` from the repo root — `pretest` builds `packages/shared`
+first since `apps/server`/`apps/web` import its compiled `dist/`).
+Coverage is real, not padded: as of the tests added in
+`packages/shared/src/evaluator.test.ts` +co, the well-tested modules
+are the strategy graph evaluator/indicators (~91% in `packages/shared`),
+`trading/riskManager.ts` (93%) and `trading/circuitBreaker.ts` (67%) in
+`apps/server`, plus `lib/signalEval.ts` and `components/pnl/format.ts`
+in `apps/web`. Everything DB-facing at the route layer (Fastify routes,
+`paperTradingEngine.ts`, `botEngine.ts`), the bitbank/Claude API
+clients, and all React rendering are still untested — know this before
+claiming "tests pass" means a change is safe end-to-end.
 
-- **Stateful backend logic** (circuit breaker, risk manager, paper
-  trading engine): write a one-off `apps/server/scripts/verify-<feature>.ts`
-  that imports the real module, runs against the real dev DB, asserts
-  with `throw new Error(...)` on failure, and **cleans up its own test
-  rows in a `finally`-equivalent block before exiting** — see
-  `apps/server/scripts/verify-circuit-breaker.ts` for the exact shape
-  (3 scenarios, each asserted, then deletes what it created). Run with
-  `npx tsx scripts/verify-<feature>.ts` from `apps/server/`.
+Pick the verification path based on what you changed:
+
+- **Pure logic** (evaluator/indicators, pricing, mappers, format
+  helpers, signal eval): a plain Vitest unit test, colocated as
+  `<file>.test.ts` next to the source. No mocking needed.
+- **Prisma-dependent business logic** (risk manager, circuit breaker):
+  `vi.mock("../db/prisma", () => ({ prisma: { ... } }))` and mock only
+  the specific calls the module under test makes — see
+  `apps/server/src/trading/riskManager.test.ts` /
+  `circuitBreaker.test.ts` for the pattern. `circuitBreaker.ts` keeps
+  state in module-level variables (not the DB), so tests must reset it
+  via the real public API (`updateCircuitBreakerSettings` +
+  `resumeTrading`) in `beforeEach` — don't rely on test execution order.
+- **Stateful backend logic you'd rather verify against a real DB**:
+  the older `apps/server/scripts/verify-<feature>.ts` pattern still
+  works and predates the Vitest setup — write one that imports the real
+  module, runs against the real dev DB, asserts with
+  `throw new Error(...)` on failure, and cleans up its own rows before
+  exiting (see `apps/server/scripts/verify-circuit-breaker.ts`). Prefer
+  a mocked Vitest test now unless you specifically need real Prisma/SQLite
+  semantics.
 - **UI-visible change**: use the `run-bitbank-ai-trader` skill's driver
   to launch the app and screenshot the actual flow — don't trust
   "it compiles." Remember the dashboard shows seed dummy data until

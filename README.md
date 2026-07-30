@@ -76,6 +76,18 @@ npm run start:server
 npm run start:web
 ```
 
+## テスト
+
+[Vitest](https://vitest.dev/)によるユニットテスト。`packages/shared`(戦略グラフの評価器・テクニカル指標)、
+`apps/server`(リスク管理・サーキットブレーカー・料金計算など、Prismaはモックして検証)、
+`apps/web`(表示フォーマッタ・シグナル評価)を対象にしている。Fastifyルートや React コンポーネントの
+描画・DBに触れる部分は未カバー。
+
+```bash
+npm run test            # 全ワークスペースのテストを実行(事前にpackages/sharedをビルド)
+npm run test:coverage   # カバレッジ計測付きで実行(各ワークスペースにcoverage/が出力される)
+```
+
 ## 現状の範囲
 
 - 取引は**ペーパートレードのみ**。実際の注文APIは呼び出さず、SQLiteに仮想残高・仮想ポジション・約定履歴を記録する。

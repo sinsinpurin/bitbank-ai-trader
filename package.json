@@ -15,7 +15,11 @@
     "build": "npm run build --workspace=packages/shared && npm run build:server && npm run build:web",
     "start:web": "cross-env NODE_ENV=production npm run start --workspace=apps/web",
     "start:server": "cross-env NODE_ENV=production npm run start --workspace=apps/server",
-    "start": "npm run build && concurrently -n server,web -c blue,green \"npm run start:server\" \"npm run start:web\""
+    "start": "npm run build && concurrently -n server,web -c blue,green \"npm run start:server\" \"npm run start:web\"",
+    "pretest": "npm run build --workspace=packages/shared",
+    "test": "npm run test --workspace=packages/shared --workspace=apps/server --workspace=apps/web",
+    "pretest:coverage": "npm run build --workspace=packages/shared",
+    "test:coverage": "npm run test:coverage --workspace=packages/shared --workspace=apps/server --workspace=apps/web"
   },
   "allowScripts": {
     "@prisma/client@5.22.0": true,
@@ -26,8 +30,10 @@
     "unrs-resolver@1.12.2": true
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.10",
     "concurrently": "^10.0.4",
     "cross-env": "^10.1.0",
-    "playwright": "^1.62.1"
+    "playwright": "^1.62.1",
+    "vitest": "^4.1.10"
   }
 }
