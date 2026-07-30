@@ -11,6 +11,7 @@ import { DailyPnlChart } from "@/components/pnl/DailyPnlChart";
 import { ReasonBreakdownPanel } from "@/components/pnl/ReasonBreakdownPanel";
 import { ClosedPositionsTable } from "@/components/pnl/ClosedPositionsTable";
 import { StrategyBreakdownTable } from "@/components/pnl/StrategyBreakdownTable";
+import { AiReviewPanel } from "@/components/pnl/AiReviewPanel";
 import { fetchPnlSummary } from "@/lib/pnlApi";
 
 const REFRESH_INTERVAL_MS = 15_000;
@@ -82,6 +83,12 @@ export default function PnlPage() {
             <GridItem colSpan={{ base: 1, xl: 2 }}>
               <CyberPanel title="Closed Positions / 決済履歴" code="06 / HIST" accent="cyan" delay={0.25}>
                 <ClosedPositionsTable positions={summary.closedPositions} />
+              </CyberPanel>
+            </GridItem>
+
+            <GridItem colSpan={{ base: 1, xl: 2 }}>
+              <CyberPanel title="AI Review / 取引レビュー" code="07 / REVIEW" accent="red" delay={0.3}>
+                <AiReviewPanel hasClosedTrades={summary.closedPositions.length > 0} />
               </CyberPanel>
             </GridItem>
           </Grid>

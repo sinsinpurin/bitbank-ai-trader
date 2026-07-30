@@ -386,6 +386,19 @@ export interface PnlSummary {
   closedPositions: ClosedPositionRecord[];
 }
 
+/** POST /api/pnl/review が返す、AIによる過去取引実績のレビュー */
+export interface PnlReview {
+  /** レビュー本文(日本語の自由文。見出しや箇条書きを含むことがある) */
+  review: string;
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+    model: string;
+    estimatedCostJpy: number;
+  };
+  generatedAt: number;
+}
+
 // ---------------------------------------------------------------------------
 // カスタムシグナルモニター(ダッシュボードの監視条件)
 // ---------------------------------------------------------------------------
