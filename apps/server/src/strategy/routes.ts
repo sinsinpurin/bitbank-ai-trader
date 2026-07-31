@@ -77,6 +77,9 @@ function isValidPair(pair: string): boolean {
   return config.targetPairs.includes(pair);
 }
 
+// P&L ReportのAI Reviewから引き継ぐ取引レビュー本文の上限文字数(プロンプト肥大化防止)
+const MAX_REVIEW_CONTEXT_LENGTH = 4000;
+
 function validateGraph(graph: unknown): graph is StrategyGraph {
   if (!graph || typeof graph !== "object") return false;
   const g = graph as StrategyGraph;
@@ -90,11 +93,13 @@ export async function strategyRoutes(app: FastifyInstance) {
   });
 
   // 自由文の要望からAIで戦略グラフを生成する(保存はしない — エディタで確認・調整後にSave)
-  app.post<{ Body: { prompt?: string; pair?: string } }>(
+  // reviewContextはP&L ReportのAI Review結果から引き継がれた参考テキスト(任意)
+  app.post<{ Body: { prompt?: string; pair?: string; reviewContext?: string } }>(
     "/api/strategies/generate",
     async (request, reply) => {
       const prompt = request.body?.prompt?.trim();
       const pair = request.body?.pair ?? config.targetPair;
+      const reviewContext = request.body?.reviewContext?.trim() || undefined;
       if (!prompt) {
         return reply.status(400).send({ error: "prompt は必須です" });
       }
@@ -104,6 +109,11 @@ export async function strategyRoutes(app: FastifyInstance) {
       if (prompt.length > 1000) {
         return reply.status(400).send({ error: "prompt は1000文字以内で入力してください" });
       }
+      if (reviewContext && reviewContext.length > MAX_REVIEW_CONTEXT_LENGTH) {
+        return reply
+          .status(400)
+          .send({ error: `reviewContext は${MAX_REVIEW_CONTEXT_LENGTH}文字以内で指定してください` });
+      }
       if (!config.anthropic.apiKey) {
         return reply
           .status(503)
@@ -111,7 +121,7 @@ export async function strategyRoutes(app: FastifyInstance) {
       }
 
       try {
-        return await generateStrategyFromPrompt(prompt, pair);
+        return await generateStrategyFromPrompt(prompt, pair, reviewContext);
       } catch (err) {
         request.log.error(err, "戦略グラフのAI生成に失敗しました");
         return reply.status(502).send({

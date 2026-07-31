@@ -53,6 +53,7 @@ import { useLiveCandles } from "@/lib/useLiveCandles";
 import { useAiJudgment } from "@/lib/useAiJudgment";
 import { useServerEvents } from "@/lib/useServerEvents";
 import { pairLabel, usePairs } from "@/lib/pairs";
+import { takePendingReviewContext } from "@/lib/reviewHandoff";
 
 const nodeTypes: NodeTypes = Object.fromEntries(
   NODE_CATALOG.map((def) => [def.type, BlueprintNodeView])
@@ -138,6 +139,8 @@ function StrategyEditor() {
   }, [pairs, primaryPair, pair]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ text: string; tone: "cyan" | "red" } | null>(null);
+  // P&L ReportのAI Reviewから引き継がれた参考テキスト(あればAI Strategy Genへ渡す)
+  const [reviewContext, setReviewContext] = useState<string | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const { botSignals } = useServerEvents([]);
@@ -157,6 +160,16 @@ function StrategyEditor() {
   const notify = useCallback((text: string, tone: "cyan" | "red" = "cyan") => {
     setMessage({ text, tone });
   }, []);
+
+  // P&L Reportの「この内容でAI戦略を生成する」から遷移してきた場合、
+  // 引き継がれたレビュー本文をAI Strategy Genへ渡す
+  useEffect(() => {
+    const pending = takePendingReviewContext();
+    if (pending) {
+      setReviewContext(pending);
+      notify("取引レビューの内容を踏まえてAI Strategy Genの準備をしました");
+    }
+  }, [notify]);
 
   const nodeTypeById = useCallback(
     (id: string) => nodes.find((n) => n.id === id)?.type,
@@ -535,7 +548,7 @@ function StrategyEditor() {
       <GridItem>
         <Stack gap={6}>
           <CyberPanel title="AI Strategy Gen" code="03 / GEN" accent="red">
-            <AiGeneratePanel pair={pair} onGenerated={handleGenerated} />
+            <AiGeneratePanel pair={pair} onGenerated={handleGenerated} initialReviewContext={reviewContext} />
           </CyberPanel>
           <CyberPanel title="Strategy Templates" code="04 / LIB" accent="cyan" collapsible>
             <Box maxH="380px" overflowY="auto" pr={1}>

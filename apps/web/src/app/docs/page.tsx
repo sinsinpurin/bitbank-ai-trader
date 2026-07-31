@@ -385,6 +385,12 @@ export default function DocsPage() {
                   <Box as="span" color="signal.yellow">保存はされません</Box>
                   — 内容を確認・調整してからSaveしてください。生成1回あたり数円のAPIコストがかかります。
                 </P>
+                <P>
+                  P&L Reportの「AI Review」でレビューを取得した後、その画面の
+                  「この内容でAI戦略を生成する(Bot Blueprintへ)」ボタンを押すとこのページへ移動し、
+                  レビューの懸念点・改善提案を踏まえた要望で戦略を生成できます。参照中のレビュー本文は
+                  AI Strategy Gen欄の上に表示され、「参照を外す」でレビュー抜きの通常の生成に戻せます。
+                </P>
 
                 <SubHeading>AI Judgment(AI判断ノード)</SubHeading>
                 <P>
@@ -492,6 +498,11 @@ export default function DocsPage() {
                   作り直します)。決済済みの取引が1件も無い場合はボタンが無効になります。
                   消費トークン・推定コストはSettingsのAI Usage集計に含まれます。
                 </Note>
+                <P>
+                  レビュー結果が表示されている間は「この内容でAI戦略を生成する(Bot Blueprintへ)」
+                  ボタンが使えます。押すとBot Blueprintページへ移動し、AI Strategy Genがレビュー内容を
+                  踏まえた戦略を提案できる状態になります(生成の実行自体はBot Blueprint側で行います)。
+                </P>
               </Stack>
             </CyberPanel>
           </Box>

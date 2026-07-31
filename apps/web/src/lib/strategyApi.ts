@@ -57,12 +57,16 @@ export async function updateStrategy(
   );
 }
 
-export async function generateStrategy(prompt: string, pair?: string): Promise<GeneratedStrategy> {
+export async function generateStrategy(
+  prompt: string,
+  pair?: string,
+  reviewContext?: string
+): Promise<GeneratedStrategy> {
   return handle(
     await fetch(`${API_URL}/api/strategies/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, pair }),
+      body: JSON.stringify({ prompt, pair, reviewContext }),
     })
   );
 }
