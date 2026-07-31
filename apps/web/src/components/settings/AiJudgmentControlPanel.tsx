@@ -1,7 +1,7 @@
 "use client";
 
 import { Box, HStack, Stack, Text } from "@chakra-ui/react";
-import type { AiUsageSummary } from "@bitbank-ai-trader/shared";
+import type { AiUsageSummary } from "@noctas/shared";
 import { CyberButton } from "@/components/ui/CyberButton";
 import { formatCostJpy } from "./format";
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { Box, SimpleGrid, Text } from "@chakra-ui/react";
-import type { AiUsageSummary } from "@bitbank-ai-trader/shared";
+import type { AiUsageSummary } from "@noctas/shared";
 import { formatCostJpy } from "./format";
 
 function formatTokens(value: number) {

@@ -3,7 +3,7 @@
 import { Box, Text } from "@chakra-ui/react";
 import { useEffect, useRef } from "react";
 import { ColorType, createChart, HistogramSeries } from "lightweight-charts";
-import type { PnlDailyPoint } from "@bitbank-ai-trader/shared";
+import type { PnlDailyPoint } from "@noctas/shared";
 import { formatJpy, formatSignedJpy, pnlColor, LOSS_COLOR, PROFIT_COLOR } from "./format";
 
 interface DailyPnlChartProps {

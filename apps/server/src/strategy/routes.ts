@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { Strategy as PrismaStrategy } from "@prisma/client";
-import { parseGraph, type Strategy, type StrategyGraph } from "@bitbank-ai-trader/shared";
+import { parseGraph, type Strategy, type StrategyGraph } from "@noctas/shared";
 import { prisma } from "../db/prisma";
 import { reloadActiveStrategies } from "./botEngine";
 import { broadcast } from "../ws/relay";

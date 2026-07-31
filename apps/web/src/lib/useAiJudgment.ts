@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { AiJudgment } from "@bitbank-ai-trader/shared";
+import type { AiJudgment } from "@noctas/shared";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 const POLL_INTERVAL_MS = 15_000;

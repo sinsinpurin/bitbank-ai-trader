@@ -26,7 +26,7 @@ import {
   isCandleTimeframe,
   type AiJudgment,
   type Trade,
-} from "@bitbank-ai-trader/shared";
+} from "@noctas/shared";
 
 async function main() {
   const app = Fastify({ logger: true });

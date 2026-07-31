@@ -2,7 +2,7 @@
 
 import { Box, Grid, GridItem, Text } from "@chakra-ui/react";
 import { useCallback, useEffect, useState } from "react";
-import type { SettingsResponse } from "@bitbank-ai-trader/shared";
+import type { SettingsResponse } from "@noctas/shared";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { CyberPanel } from "@/components/ui/CyberPanel";
 import { AiJudgmentControlPanel } from "@/components/settings/AiJudgmentControlPanel";

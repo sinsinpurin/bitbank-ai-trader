@@ -1,7 +1,7 @@
 "use client";
 
 import { Box, HStack, Stack, Text } from "@chakra-ui/react";
-import type { Trade } from "@bitbank-ai-trader/shared";
+import type { Trade } from "@noctas/shared";
 
 const SIDE_STYLE: Record<Trade["side"], { label: string; color: string }> = {
   buy: { label: "BUY", color: "#39FF88" },

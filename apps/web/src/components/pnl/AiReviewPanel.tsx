@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Box, Stack, Text } from "@chakra-ui/react";
-import type { PnlReview } from "@bitbank-ai-trader/shared";
+import type { PnlReview } from "@noctas/shared";
 import { CyberButton } from "@/components/ui/CyberButton";
 import { requestPnlReview } from "@/lib/pnlApi";
 import { stashReviewContext } from "@/lib/reviewHandoff";

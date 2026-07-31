@@ -1,5 +1,5 @@
 import { io, Socket } from "socket.io-client";
-import type { Ticker } from "@bitbank-ai-trader/shared";
+import type { Ticker } from "@noctas/shared";
 
 const STREAM_URL = "wss://stream.bitbank.cc";
 

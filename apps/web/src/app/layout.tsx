@@ -24,7 +24,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Bitbank AI Trader",
+  title: "Noctas",
   description: "Claude搭載のAI売買判断ダッシュボード(ペーパートレード)",
 };
 

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { SignalWatch as PrismaSignalWatch } from "@prisma/client";
-import type { BotSignal, SignalWatch, SignalWatchConfig } from "@bitbank-ai-trader/shared";
+import type { BotSignal, SignalWatch, SignalWatchConfig } from "@noctas/shared";
 import { prisma } from "../db/prisma";
 import { config } from "../config";
 

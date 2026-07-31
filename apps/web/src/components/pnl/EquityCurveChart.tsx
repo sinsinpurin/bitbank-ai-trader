@@ -8,7 +8,7 @@ import {
   createChart,
   type UTCTimestamp,
 } from "lightweight-charts";
-import type { PnlCurvePoint } from "@bitbank-ai-trader/shared";
+import type { PnlCurvePoint } from "@noctas/shared";
 import { formatJpy, formatSignedJpy, pnlColor, LOSS_COLOR, PROFIT_COLOR } from "./format";
 
 /** チャートの時刻軸をJSTで読めるようにするオフセット(lightweight-chartsはUTC表示のため) */

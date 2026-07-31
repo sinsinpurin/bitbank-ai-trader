@@ -9,7 +9,7 @@ import {
   type Node,
   type NodeProps,
 } from "@xyflow/react";
-import type { NodeLiveValue, StrategyNodeParams, StrategyNodeType } from "@bitbank-ai-trader/shared";
+import type { NodeLiveValue, StrategyNodeParams, StrategyNodeType } from "@noctas/shared";
 import {
   NODE_DEF_BY_TYPE,
   PORT_COLOR,

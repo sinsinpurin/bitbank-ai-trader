@@ -1,7 +1,7 @@
 "use client";
 
 import { Box, HStack, Text, Wrap } from "@chakra-ui/react";
-import type { Strategy } from "@bitbank-ai-trader/shared";
+import type { Strategy } from "@noctas/shared";
 import { CyberButton } from "@/components/ui/CyberButton";
 import { ZoneTag } from "@/components/ui/ZoneTag";
 

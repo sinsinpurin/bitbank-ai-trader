@@ -1,7 +1,7 @@
 "use client";
 
 import { Box, HStack, Stack, Text } from "@chakra-ui/react";
-import type { PnlReasonBreakdown, TradeReason } from "@bitbank-ai-trader/shared";
+import type { PnlReasonBreakdown, TradeReason } from "@noctas/shared";
 import { formatSignedJpy, pnlColor } from "./format";
 
 const REASON_STYLE: Record<TradeReason, { label: string; color: string }> = {

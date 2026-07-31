@@ -1,5 +1,5 @@
 {
-  "name": "@bitbank-ai-trader/server",
+  "name": "@noctas/server",
   "version": "0.1.0",
   "private": true,
   "main": "dist/index.js",
@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
-    "@bitbank-ai-trader/shared": "0.1.0",
+    "@noctas/shared": "0.1.0",
     "@fastify/cors": "^11.2.0",
     "@fastify/websocket": "^11.0.1",
     "@prisma/client": "^5.22.0",

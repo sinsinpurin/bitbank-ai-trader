@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { PnlReview, PnlSummary } from "@bitbank-ai-trader/shared";
+import type { PnlReview, PnlSummary } from "@noctas/shared";
 import { config } from "../config";
 import { prisma } from "../db/prisma";
 import { estimateCostJpy } from "./pricing";

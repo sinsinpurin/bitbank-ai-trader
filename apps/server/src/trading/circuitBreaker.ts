@@ -1,5 +1,5 @@
 import type { Position as PrismaPosition } from "@prisma/client";
-import type { CircuitBreakerStatus } from "@bitbank-ai-trader/shared";
+import type { CircuitBreakerStatus } from "@noctas/shared";
 import { prisma } from "../db/prisma";
 
 /**

@@ -1,7 +1,7 @@
 "use client";
 
 import { Box, HStack, Stack, Text } from "@chakra-ui/react";
-import type { StrategyNodeType } from "@bitbank-ai-trader/shared";
+import type { StrategyNodeType } from "@noctas/shared";
 import { NODE_CATALOG, nodeAccentColor, type NodeCategory } from "./nodeCatalog";
 
 export const DND_MIME = "application/x-blueprint-node";

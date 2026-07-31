@@ -244,7 +244,7 @@ export default function DocsPage() {
           <CyberPanel title="Documentation" code="00 / INDEX" accent="red" delay={0}>
             <Stack gap={3}>
               <P>
-                Bitbank AI Trader は、bitbankの公開データを使った
+                Noctas は、bitbankの公開データを使った
                 <Box as="span" color="signal.yellow" fontWeight="700">ペーパートレード(仮想売買)</Box>
                 システムです。実際の注文は一切行いません。仮想残高¥1,000,000からスタートし、
                 「AIによる売買判断」と「自作Bot戦略の自動実行」の2系統で取引をシミュレートします。

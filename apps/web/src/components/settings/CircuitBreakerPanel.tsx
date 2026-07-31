@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Box, HStack, Input, SimpleGrid, Stack, Text } from "@chakra-ui/react";
-import type { AppSettings, CircuitBreakerStatus } from "@bitbank-ai-trader/shared";
+import type { AppSettings, CircuitBreakerStatus } from "@noctas/shared";
 import { CyberButton } from "@/components/ui/CyberButton";
 import type { UpdateSettingsInput } from "@/lib/settingsApi";
 

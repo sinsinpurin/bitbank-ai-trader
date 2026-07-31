@@ -1,6 +1,6 @@
 ---
-name: open-pr-bitbank-ai-trader
-description: Turn the current working-tree diff in bitbank-ai-trader into a branch + commit, then show the drafted PR title/body to the user and only push + open the PR once they agree. Use when asked to create a branch, commit and push, open/create a pull request, or "ship this."
+name: open-pr-noctas
+description: Turn the current working-tree diff in Noctas into a branch + commit, then show the drafted PR title/body to the user and only push + open the PR once they agree. Use when asked to create a branch, commit and push, open/create a pull request, or "ship this."
 ---
 
 The hard rule this skill exists to enforce: **branching and committing
@@ -10,7 +10,7 @@ go.** This mirrors how PRs actually got made in this repo's history
 (#4, #5, #6 in this session) — draft first, confirm, then push.
 
 `gh` is expected to already be installed and authenticated as
-`sinsinpurin` for `sinsinpurin/bitbank-ai-trader` (verify with
+`sinsinpurin` for `sinsinpurin/noctas` (verify with
 `gh auth status`; if it's not there, `winget install --id GitHub.cli`
 then `gh auth login --web` — see this session's history for the exact
 flow if needed).

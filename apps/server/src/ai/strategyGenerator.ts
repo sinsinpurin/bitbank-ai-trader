@@ -6,7 +6,7 @@ import {
   type StrategyGraph,
   type StrategyNode,
   type StrategyNodeType,
-} from "@bitbank-ai-trader/shared";
+} from "@noctas/shared";
 import { config } from "../config";
 import { prisma } from "../db/prisma";
 import { estimateCostJpy } from "./pricing";

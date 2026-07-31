@@ -1,4 +1,4 @@
-# bitbank-ai-trader
+# Noctas
 
 Claude(Anthropic API)による売買判断をペーパートレードで検証する、cyberpunk風UIのAIトレーディングダッシュボード。
 

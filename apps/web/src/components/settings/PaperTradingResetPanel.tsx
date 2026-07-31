@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Box, HStack, Input, Stack, Text } from "@chakra-ui/react";
-import type { TradingMode } from "@bitbank-ai-trader/shared";
+import type { TradingMode } from "@noctas/shared";
 import { CyberButton } from "@/components/ui/CyberButton";
 import { resetPaperTrading } from "@/lib/settingsApi";
 

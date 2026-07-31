@@ -14,7 +14,7 @@ import {
   type CandleTimeframe,
   type OrderSide,
   type StrategyGraph,
-} from "@bitbank-ai-trader/shared";
+} from "@noctas/shared";
 
 /**
  * Bot戦略の実行エンジン(マルチペア対応)。

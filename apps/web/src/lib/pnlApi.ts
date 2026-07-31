@@ -1,4 +1,4 @@
-import type { PnlReview, PnlSummary } from "@bitbank-ai-trader/shared";
+import type { PnlReview, PnlSummary } from "@noctas/shared";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 

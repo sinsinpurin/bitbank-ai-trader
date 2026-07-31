@@ -1,5 +1,5 @@
 import "dotenv/config";
-import type { TradingMode } from "@bitbank-ai-trader/shared";
+import type { TradingMode } from "@noctas/shared";
 
 function requireEnv(name: string, fallback?: string): string {
   const value = process.env[name] ?? fallback;

@@ -1,7 +1,7 @@
 "use client";
 
 import { Box, HStack, Stack, Text } from "@chakra-ui/react";
-import type { AiUsageStats } from "@bitbank-ai-trader/shared";
+import type { AiUsageStats } from "@noctas/shared";
 import { ZoneTag } from "@/components/ui/ZoneTag";
 
 interface StatusMeterProps {

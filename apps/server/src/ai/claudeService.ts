@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { AiAction } from "@bitbank-ai-trader/shared";
+import type { AiAction } from "@noctas/shared";
 import { config } from "../config";
 
 const anthropic = new Anthropic({ apiKey: config.anthropic.apiKey });

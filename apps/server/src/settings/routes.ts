@@ -4,7 +4,7 @@ import type {
   AiUsageSummary,
   AppSettings,
   SettingsResponse,
-} from "@bitbank-ai-trader/shared";
+} from "@noctas/shared";
 import { prisma } from "../db/prisma";
 import { config } from "../config";
 import { estimateCostJpy } from "../ai/pricing";

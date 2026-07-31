@@ -2,7 +2,7 @@
 
 import { Box, Grid, GridItem, Text } from "@chakra-ui/react";
 import { useCallback, useEffect, useState } from "react";
-import type { PnlSummary } from "@bitbank-ai-trader/shared";
+import type { PnlSummary } from "@noctas/shared";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { CyberPanel } from "@/components/ui/CyberPanel";
 import { PnlStatTiles } from "@/components/pnl/PnlStatTiles";

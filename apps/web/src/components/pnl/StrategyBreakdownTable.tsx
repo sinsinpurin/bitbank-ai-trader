@@ -1,7 +1,7 @@
 "use client";
 
 import { Box, Grid, Text } from "@chakra-ui/react";
-import type { PnlStrategyBreakdown } from "@bitbank-ai-trader/shared";
+import type { PnlStrategyBreakdown } from "@noctas/shared";
 import { formatSignedJpy, pnlColor } from "./format";
 
 const COLUMNS = "minmax(160px, 2fr) minmax(80px, 1fr) minmax(70px, 0.8fr) minmax(70px, 0.8fr) minmax(80px, 0.9fr) minmax(110px, 1.1fr)";

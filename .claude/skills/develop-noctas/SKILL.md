@@ -1,6 +1,6 @@
 ---
-name: develop-bitbank-ai-trader
-description: Playbook for adding a feature, changing risk/AI logic, or reviewing a change in bitbank-ai-trader. Use when asked to add a feature, add an env var, add a Bot Blueprint node type, change the Prisma schema, or explain why the codebase evolved a certain way. Complements run-bitbank-ai-trader (which builds/launches/screenshots the app).
+name: develop-noctas
+description: Playbook for adding a feature, changing risk/AI logic, or reviewing a change in Noctas. Use when asked to add a feature, add an env var, add a Bot Blueprint node type, change the Prisma schema, or explain why the codebase evolved a certain way. Complements run-noctas (which builds/launches/screenshots the app).
 ---
 
 This is a from-scratch reading of this repo's own `git log` — every rule
@@ -19,7 +19,7 @@ layers in the same order (verified against `30b76e3`, `2352aa1`,
 
 1. **`packages/shared/src/index.ts`** (+ `evaluator.ts`/`indicators.ts`
    if it's Bot Blueprint logic) — add the TypeScript types/interfaces
-   first. Both server and web import from `@bitbank-ai-trader/shared`;
+   first. Both server and web import from `@noctas/shared`;
    this is the contract between them.
 2. **`apps/server/prisma/schema.prisma`** — if the feature needs
    persistence, add fields/models here, then generate a migration (see
@@ -114,7 +114,7 @@ Pick the verification path based on what you changed:
   exiting (see `apps/server/scripts/verify-circuit-breaker.ts`). Prefer
   a mocked Vitest test now unless you specifically need real Prisma/SQLite
   semantics.
-- **UI-visible change**: use the `run-bitbank-ai-trader` skill's driver
+- **UI-visible change**: use the `run-noctas` skill's driver
   to launch the app and screenshot the actual flow — don't trust
   "it compiles." Remember the dashboard shows seed dummy data until
   the WebSocket connects (~2-3s) — that skill's Gotchas section covers

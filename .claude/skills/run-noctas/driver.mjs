@@ -1,22 +1,22 @@
-// Driver for the bitbank-ai-trader dashboard (apps/web, port 3000).
+// Driver for the Noctas dashboard (apps/web, port 3000).
 // Reads a line-oriented script from stdin (same shape as chromium-cli),
 // drives a headless Chromium via Playwright, and exits at EOF.
 //
 // Usage:
-//   node .claude/skills/run-bitbank-ai-trader/driver.mjs <<'EOF'
+//   node .claude/skills/run-noctas/driver.mjs <<'EOF'
 //   nav http://localhost:3000
 //   wait-for text=System Status
 //   screenshot 01-dashboard
 //   EOF
 //
-// Screenshots land in SCREENSHOT_DIR (default: <os tmpdir>/bitbank-ai-trader-shots).
+// Screenshots land in SCREENSHOT_DIR (default: <os tmpdir>/noctas-shots).
 import { chromium } from 'playwright';
 import * as readline from 'node:readline';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-const SHOT_DIR = process.env.SCREENSHOT_DIR || path.join(os.tmpdir(), 'bitbank-ai-trader-shots');
+const SHOT_DIR = process.env.SCREENSHOT_DIR || path.join(os.tmpdir(), 'noctas-shots');
 fs.mkdirSync(SHOT_DIR, { recursive: true });
 
 let browser = null;
