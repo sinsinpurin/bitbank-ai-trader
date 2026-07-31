@@ -5,7 +5,7 @@ import type { PairsInfo } from "@noctas/shared";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
-const FALLBACK: PairsInfo = { pairs: ["btc_jpy"], primaryPair: "btc_jpy" };
+const FALLBACK: PairsInfo = { pairs: ["btc_jpy"], primaryPair: "btc_jpy", maxPositionJpy: 30_000 };
 
 /** ペア表記("btc_jpy" → "BTC/JPY") */
 export function pairLabel(pair: string): string {

@@ -40,8 +40,12 @@ export function riskFormFromStrategy(values: {
   };
 }
 
-/** フォーム文字列→API形式(空欄はnull=グローバル設定)。不正値はエラーメッセージを返す */
-export function riskFormToInput(form: RiskFormValues):
+/**
+ * フォーム文字列→API形式(空欄はnull=グローバル設定)。不正値はエラーメッセージを返す。
+ * maxPositionJpyはサーバーのAI_MAX_POSITION_JPY(GET /api/pairsから取得)。
+ * 投入額はこの上限を超えて入力できない(サーバー側でも同じ上限を検証する)。
+ */
+export function riskFormToInput(form: RiskFormValues, maxPositionJpy: number):
   | {
       ok: true;
       value: {
@@ -68,6 +72,12 @@ export function riskFormToInput(form: RiskFormValues):
 
   const size = parse(form.positionSizeJpy, "投入額");
   if (!size.ok) return size;
+  if (size.value !== null && size.value > maxPositionJpy) {
+    return {
+      ok: false,
+      error: `投入額は上限(¥${maxPositionJpy.toLocaleString("ja-JP")})以下で入力してください`,
+    };
+  }
   const maxPos = parse(form.maxOpenPositions, "最大ポジション数", true);
   if (!maxPos.ok) return maxPos;
   const sl = parse(form.stopLossPct, "損切り%");
@@ -89,25 +99,32 @@ export function riskFormToInput(form: RiskFormValues):
   };
 }
 
-const FIELDS: { key: keyof RiskFormValues; label: string; placeholder: string }[] = [
-  { key: "positionSizeJpy", label: "投入額 (円/回)", placeholder: "既定: 30,000" },
-  { key: "maxOpenPositions", label: "最大ポジション数", placeholder: "既定: 3 (ペア全体)" },
-  { key: "stopLossPct", label: "損切り %", placeholder: "既定: 3" },
-  { key: "takeProfitPct", label: "利確 %", placeholder: "なし" },
-  { key: "trailingStopPct", label: "トレーリング %", placeholder: "なし" },
-];
-
 export function RiskSettingsPanel({
   values,
   onChange,
+  maxPositionJpy,
 }: {
   values: RiskFormValues;
   onChange: (next: RiskFormValues) => void;
+  /** サーバーのAI_MAX_POSITION_JPY(GET /api/pairs由来)。投入額欄の上限表示・placeholderに使う */
+  maxPositionJpy: number;
 }) {
+  const fields: { key: keyof RiskFormValues; label: string; placeholder: string }[] = [
+    {
+      key: "positionSizeJpy",
+      label: "投入額 (円/回)",
+      placeholder: `上限: ${maxPositionJpy.toLocaleString("ja-JP")}`,
+    },
+    { key: "maxOpenPositions", label: "最大ポジション数", placeholder: "既定: 3 (ペア全体)" },
+    { key: "stopLossPct", label: "損切り %", placeholder: "既定: 3" },
+    { key: "takeProfitPct", label: "利確 %", placeholder: "なし" },
+    { key: "trailingStopPct", label: "トレーリング %", placeholder: "なし" },
+  ];
+
   return (
     <Box>
       <SimpleGrid columns={{ base: 2, md: 5 }} gap={3}>
-        {FIELDS.map((field) => (
+        {fields.map((field) => (
           <Box key={field.key}>
             <Text
               fontFamily="heading"
@@ -137,8 +154,10 @@ export function RiskSettingsPanel({
         ))}
       </SimpleGrid>
       <Text fontFamily="mono" fontSize="10px" color="text.disabled" mt={2}>
-        空欄はグローバル設定を使用。利確・トレーリングは設定した戦略のポジションにのみ適用され、
-        Save時にこの戦略の設定として保存されます(既存ポジションには影響しません)。
+        空欄はグローバル設定を使用。投入額は上限¥{maxPositionJpy.toLocaleString("ja-JP")}
+        (AI_MAX_POSITION_JPY)を超えて設定できません。利確・トレーリングは設定した戦略の
+        ポジションにのみ適用され、Save時にこの戦略の設定として保存されます
+        (既存ポジションには影響しません)。
       </Text>
     </Box>
   );

@@ -347,6 +347,8 @@ export interface PairsInfo {
   pairs: Pair[];
   /** メインペア(先頭ペア) */
   primaryPair: Pair;
+  /** 1回の投入額の上限(円)。AI_MAX_POSITION_JPYの値で、戦略ごとのpositionSizeJpyはこれを超えられない */
+  maxPositionJpy: number;
 }
 
 /** GET /api/pnl が返す損益サマリ(全ペア合算) */

@@ -196,7 +196,9 @@ export async function openBuyPosition(
 
   // スリッページ込みの約定価格で建玉し、手数料は現金から追加で差し引く
   const execPrice = executionPrice(currentPrice, "buy");
-  const sizeJpy = options.sizeJpy ?? config.risk.maxPositionJpy;
+  // 戦略ごとの投入額はAPI側(strategy/routes.ts)でAI_MAX_POSITION_JPY以下に検証済みだが、
+  // 環境変数側の上限が後から引き下げられた場合などに備え、実行時にも念のため上限でクランプする
+  const sizeJpy = Math.min(options.sizeJpy ?? config.risk.maxPositionJpy, config.risk.maxPositionJpy);
   const amount = sizeJpy / execPrice;
   const cost = execPrice * amount;
   const entryFee = feeOf(cost);

@@ -25,7 +25,7 @@ function toStrategyDto(row: PrismaStrategy): Strategy {
   };
 }
 
-interface StrategyBody {
+export interface StrategyBody {
   name?: string;
   pair?: string;
   description?: string;
@@ -40,7 +40,7 @@ interface StrategyBody {
 }
 
 /** リスク設定の妥当性を検証し、エラーメッセージまたはnullを返す */
-function validateRiskSettings(body: StrategyBody): string | null {
+export function validateRiskSettings(body: StrategyBody): string | null {
   const positives: [string, number | null | undefined][] = [
     ["positionSizeJpy", body.positionSizeJpy],
     ["stopLossPct", body.stopLossPct],
@@ -51,6 +51,15 @@ function validateRiskSettings(body: StrategyBody): string | null {
     if (value !== undefined && value !== null && (!Number.isFinite(value) || value <= 0)) {
       return `${key} は正の数値またはnullで指定してください`;
     }
+  }
+  // 投入額の上限はAI_MAX_POSITION_JPY(config.risk.maxPositionJpy)。戦略ごとの上書きは
+  // この上限を超えられない(超えて設定したい場合は環境変数側を上げる必要がある)
+  if (
+    body.positionSizeJpy !== undefined &&
+    body.positionSizeJpy !== null &&
+    body.positionSizeJpy > config.risk.maxPositionJpy
+  ) {
+    return `positionSizeJpy は上限(AI_MAX_POSITION_JPY = ¥${config.risk.maxPositionJpy.toLocaleString("ja-JP")})以下で指定してください`;
   }
   if (
     body.maxOpenPositions !== undefined &&

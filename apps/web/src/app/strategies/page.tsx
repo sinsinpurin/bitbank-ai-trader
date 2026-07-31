@@ -127,7 +127,7 @@ function StrategyEditor() {
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [name, setName] = useState(STRATEGY_TEMPLATES[0].name);
-  const { pairs, primaryPair } = usePairs();
+  const { pairs, primaryPair, maxPositionJpy } = usePairs();
   const [pair, setPair] = useState(primaryPair);
   const [riskForm, setRiskForm] = useState<RiskFormValues>(EMPTY_RISK_FORM);
 
@@ -247,7 +247,7 @@ function StrategyEditor() {
       notify(error, "red");
       return;
     }
-    const risk = riskFormToInput(riskForm);
+    const risk = riskFormToInput(riskForm, maxPositionJpy);
     if (!risk.ok) {
       notify(risk.error, "red");
       return;
@@ -269,7 +269,7 @@ function StrategyEditor() {
     } finally {
       setSaving(false);
     }
-  }, [validate, nodes, edges, selectedId, name, pair, riskForm, notify, refreshList]);
+  }, [validate, nodes, edges, selectedId, name, pair, riskForm, maxPositionJpy, notify, refreshList]);
 
   const handleLoad = useCallback(
     (strategy: Strategy) => {
@@ -552,7 +552,7 @@ function StrategyEditor() {
           </CyberPanel>
 
           <CyberPanel title="Risk Settings / リスク設定" code="02b / RISK" accent="red" collapsible>
-            <RiskSettingsPanel values={riskForm} onChange={setRiskForm} />
+            <RiskSettingsPanel values={riskForm} onChange={setRiskForm} maxPositionJpy={maxPositionJpy} />
           </CyberPanel>
         </Stack>
       </GridItem>
