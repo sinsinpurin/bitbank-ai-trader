@@ -1,4 +1,4 @@
-import type { StrategyGraph, StrategyNode } from "@bitbank-ai-trader/shared";
+import type { StrategyGraph, StrategyNode } from "@noctas/shared";
 
 /**
  * 戦略グラフを人間が読める日本語の説明文へ変換する。

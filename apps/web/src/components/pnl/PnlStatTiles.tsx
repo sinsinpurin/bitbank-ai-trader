@@ -1,7 +1,7 @@
 "use client";
 
 import { Box, SimpleGrid, Text } from "@chakra-ui/react";
-import type { PnlSummary } from "@bitbank-ai-trader/shared";
+import type { PnlSummary } from "@noctas/shared";
 import { formatJpy, formatSignedJpy, pnlColor } from "./format";
 
 interface TileProps {

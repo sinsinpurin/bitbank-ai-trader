@@ -1,7 +1,7 @@
 "use client";
 
 import { Box, Grid, Text } from "@chakra-ui/react";
-import type { ClosedPositionRecord, TradeReason } from "@bitbank-ai-trader/shared";
+import type { ClosedPositionRecord, TradeReason } from "@noctas/shared";
 import {
   formatDateTime,
   formatDuration,

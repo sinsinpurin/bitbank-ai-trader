@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { HStack, Stack, chakra } from "@chakra-ui/react";
-import type { BotSignal } from "@bitbank-ai-trader/shared";
+import type { BotSignal } from "@noctas/shared";
 import { BotSignalFeed } from "@/components/strategy/BotSignalFeed";
 import { fetchBotSignals } from "@/lib/signalsApi";
 import { pairLabel } from "@/lib/pairs";

@@ -3,7 +3,7 @@ import { prisma } from "../db/prisma";
 import { broadcast } from "../ws/relay";
 import { config } from "../config";
 import { estimateCostJpy } from "./pricing";
-import type { AiJudgment, AiUsageStats } from "@bitbank-ai-trader/shared";
+import type { AiJudgment, AiUsageStats } from "@noctas/shared";
 
 /**
  * Bot Blueprintの「AI Judgment」ノードへ供給する、ペアごとの最新AI判断キャッシュ。

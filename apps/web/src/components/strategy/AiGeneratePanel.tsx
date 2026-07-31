@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Box, Stack, Text, Textarea } from "@chakra-ui/react";
-import type { GeneratedStrategy } from "@bitbank-ai-trader/shared";
+import type { GeneratedStrategy } from "@noctas/shared";
 import { CyberButton } from "@/components/ui/CyberButton";
 import { generateStrategy } from "@/lib/strategyApi";
 

@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import type { ServerEvent } from "@bitbank-ai-trader/shared";
+import type { ServerEvent } from "@noctas/shared";
 
 const clients = new Set<WebSocket>();
 

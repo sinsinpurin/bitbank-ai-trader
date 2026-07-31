@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import type { NodeLiveValue } from "@bitbank-ai-trader/shared";
+import type { NodeLiveValue } from "@noctas/shared";
 
 /**
  * 現在の相場データでキャンバス上の各ノードを評価した最新値。

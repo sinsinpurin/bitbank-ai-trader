@@ -1,7 +1,7 @@
 "use client";
 
 import { Box, Grid, Text } from "@chakra-ui/react";
-import type { AiUsageDay } from "@bitbank-ai-trader/shared";
+import type { AiUsageDay } from "@noctas/shared";
 import { formatCostJpy } from "./format";
 
 const COLUMNS = "minmax(90px, 1fr) repeat(2, minmax(70px, 0.8fr)) repeat(2, minmax(100px, 1fr)) minmax(90px, 1fr)";

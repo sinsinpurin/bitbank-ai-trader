@@ -3,7 +3,7 @@ import { broadcast } from "../ws/relay";
 import { config } from "../config";
 import { closePosition } from "./paperTradingEngine";
 import { toPositionEvent, toTradeEvent } from "./mappers";
-import type { TradeReason } from "@bitbank-ai-trader/shared";
+import type { TradeReason } from "@noctas/shared";
 
 // 決済処理が完了するまでの間、同一ポジションを二重に決済しないためのガード
 const closingInFlight = new Set<string>();

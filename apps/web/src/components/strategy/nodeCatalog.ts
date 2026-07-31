@@ -1,4 +1,4 @@
-import type { StrategyNodeParams, StrategyNodeType } from "@bitbank-ai-trader/shared";
+import type { StrategyNodeParams, StrategyNodeType } from "@noctas/shared";
 
 /** ハンドルを流れる値の種類。number=数値シリーズ、bool=真偽シリーズ */
 export type PortKind = "number" | "bool";

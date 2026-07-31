@@ -1,4 +1,4 @@
-import type { StrategyGraph } from "@bitbank-ai-trader/shared";
+import type { StrategyGraph } from "@noctas/shared";
 
 /**
  * 初心者向けの戦略テンプレート集。

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "../db/prisma";
 import { config } from "../config";
 import type { Position } from "@prisma/client";
-import type { TradeReason } from "@bitbank-ai-trader/shared";
+import type { TradeReason } from "@noctas/shared";
 import { isBuyHalted, onPositionClosed } from "./circuitBreaker";
 
 export const INITIAL_JPY_BALANCE = 1_000_000;

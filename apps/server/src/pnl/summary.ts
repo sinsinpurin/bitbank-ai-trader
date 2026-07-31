@@ -8,7 +8,7 @@ import type {
   PnlSummary,
   Position,
   TradeReason,
-} from "@bitbank-ai-trader/shared";
+} from "@noctas/shared";
 import { prisma } from "../db/prisma";
 import { config } from "../config";
 import { getCandleHistory } from "../strategy/botEngine";

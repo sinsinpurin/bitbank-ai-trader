@@ -1,5 +1,5 @@
 import type { Position as PrismaPosition, Trade as PrismaTrade } from "@prisma/client";
-import type { Position, Trade } from "@bitbank-ai-trader/shared";
+import type { Position, Trade } from "@noctas/shared";
 
 export function toTradeEvent(trade: PrismaTrade): Trade {
   return {

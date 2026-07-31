@@ -1,7 +1,7 @@
 "use client";
 
 import { Box, HStack, Stack, Text } from "@chakra-ui/react";
-import type { BotSignal } from "@bitbank-ai-trader/shared";
+import type { BotSignal } from "@noctas/shared";
 
 function formatTime(ts: number) {
   return new Date(ts).toLocaleTimeString("ja-JP", { hour12: false });

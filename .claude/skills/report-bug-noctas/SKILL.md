@@ -1,6 +1,6 @@
 ---
-name: report-bug-bitbank-ai-trader
-description: Triage a suspected bug in bitbank-ai-trader (isolate root cause across packages/shared, apps/server, apps/web), then file a GitHub issue via gh. Use when a bug is found or reported, something behaves unexpectedly, a test fails unexpectedly, or the user asks to report/file/triage/isolate a bug.
+name: report-bug-noctas
+description: Triage a suspected bug in Noctas (isolate root cause across packages/shared, apps/server, apps/web), then file a GitHub issue via gh. Use when a bug is found or reported, something behaves unexpectedly, a test fails unexpectedly, or the user asks to report/file/triage/isolate a bug.
 ---
 
 Bug reports here go through two phases: **isolate first, file second.** A
@@ -8,7 +8,7 @@ GitHub issue with "it's broken" and no repro is worse than useless in this
 repo — file only once you know which package it's in and can show the
 gap between expected and actual behavior. `gh` is already installed and
 authenticated in this environment as `sinsinpurin` (repo:
-`sinsinpurin/bitbank-ai-trader`) — verify with `gh auth status` if a
+`sinsinpurin/noctas`) — verify with `gh auth status` if a
 session looks stale.
 
 All paths below are relative to the repo root.
@@ -19,7 +19,7 @@ Check these before spending time isolating — they look like bugs but aren't:
 
 - **Dashboard shows stale/seed data or "LINK: OFFLINE" / "接続状態:
   DISCONNECTED" for the first ~2-3s after load.** The WebSocket just
-  hasn't connected yet. Not a bug — see the `run-bitbank-ai-trader`
+  hasn't connected yet. Not a bug — see the `run-noctas`
   skill's Gotchas.
 - **`アクティブ戦略を再読込しました (N件)` doesn't fire after a strategy
   edit.** Only `PUT /api/strategies/:id` (Save in the editor) triggers
@@ -65,7 +65,7 @@ Bugs here live in one of three places; the isolation technique differs:
   `apps/server/scripts/verify-circuit-breaker.ts` — creates its own
   rows, asserts, deletes them again).
 - **`apps/web` (UI-visible behavior)**: reproduce with the
-  `run-bitbank-ai-trader` skill's Playwright driver — `nav`, click
+  `run-noctas` skill's Playwright driver — `nav`, click
   through the exact repro steps, `screenshot`, then `console --errors`.
   A screenshot + a clean console (or a console error that IS the bug)
   is your evidence. Don't skip the 2-3s WS-connect wait or you'll
@@ -85,7 +85,7 @@ tail -n 100 /tmp/server-*.log   # or wherever you redirected `npm run dev:server
 
 **If it looks like a regression**, `git log -p --follow -- <file>` or
 `git bisect` against the specific file — this repo's git history is
-detailed enough (see the `develop-bitbank-ai-trader` skill's
+detailed enough (see the `develop-noctas` skill's
 Design-decision history) that the commit that introduced a behavior is
 usually findable in a few minutes.
 

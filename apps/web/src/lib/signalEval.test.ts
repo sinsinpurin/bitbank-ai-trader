@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SignalWatchConfig } from "@bitbank-ai-trader/shared";
+import type { SignalWatchConfig } from "@noctas/shared";
 import { evaluateSignal, signalLabel } from "./signalEval";
 
 describe("signalLabel", () => {

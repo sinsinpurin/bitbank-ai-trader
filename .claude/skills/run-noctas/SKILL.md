@@ -1,15 +1,15 @@
 ---
-name: run-bitbank-ai-trader
-description: Build, run, and drive bitbank-ai-trader (Fastify/WebSocket/Prisma backend + Next.js cyberpunk dashboard). Use when asked to start the app, run the dev servers, take a screenshot of the dashboard/Bot Blueprint, or verify a change works in the running app.
+name: run-noctas
+description: Build, run, and drive Noctas (Fastify/WebSocket/Prisma backend + Next.js cyberpunk dashboard). Use when asked to start the app, run the dev servers, take a screenshot of the dashboard/Bot Blueprint, or verify a change works in the running app.
 ---
 
-bitbank-ai-trader is one product made of two processes that must run
+Noctas is one product made of two processes that must run
 together: `apps/server` (Fastify + WebSocket + Prisma/SQLite + Claude
 API, port 4000) and `apps/web` (Next.js dashboard, port 3000). The
 dashboard is a WebSocket client — it renders seeded dummy data until
 the socket connects (2-3s), so "it loaded" is not enough proof; drive
 it with the Playwright script at
-`.claude/skills/run-bitbank-ai-trader/driver.mjs` and confirm
+`.claude/skills/run-noctas/driver.mjs` and confirm
 `STREAM CONNECTED` / `LINK : ONLINE` before trusting a screenshot.
 
 All paths below are relative to the repo root.
@@ -69,7 +69,7 @@ idea as `chromium-cli`, but a plain Playwright/chromium script since
 the `chromium-cli` extension isn't installed in this environment:
 
 ```bash
-node .claude/skills/run-bitbank-ai-trader/driver.mjs <<'EOF'
+node .claude/skills/run-noctas/driver.mjs <<'EOF'
 nav http://localhost:3000
 wait-for text=System Status
 eval new Promise(r => setTimeout(r, 3000))
@@ -80,8 +80,8 @@ EOF
 ```
 
 Screenshots land in `SCREENSHOT_DIR` (default
-`<os tmpdir>/bitbank-ai-trader-shots/<name>.png` — on Windows that's
-`%LOCALAPPDATA%\Temp\bitbank-ai-trader-shots\`). Read the PNG after
+`<os tmpdir>/noctas-shots/<name>.png` — on Windows that's
+`%LOCALAPPDATA%\Temp\noctas-shots\`). Read the PNG after
 every run — a page that loaded is not the same as a page that connected.
 
 ### Driver commands

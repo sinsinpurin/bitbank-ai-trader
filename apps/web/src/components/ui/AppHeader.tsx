@@ -37,7 +37,7 @@ export function AppHeader({ connected }: { connected?: boolean }) {
             <Box as="span" color="signal.red" mr={2}>
               {"//"}
             </Box>
-            Bitbank AI Trader
+            Noctas
           </Text>
           <Text
             fontFamily="heading"

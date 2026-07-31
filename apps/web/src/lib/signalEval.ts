@@ -4,7 +4,7 @@ import {
   type SignalWatchConfig,
   type StrategyGraph,
   type StrategyNode,
-} from "@bitbank-ai-trader/shared";
+} from "@noctas/shared";
 
 /**
  * シグナル監視条件を戦略エディタと同じ評価エンジンで評価するためのヘルパー。

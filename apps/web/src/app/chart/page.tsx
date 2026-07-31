@@ -8,7 +8,7 @@ import {
   DEFAULT_CANDLE_TIMEFRAME,
   minutesOfTimeframe,
   type CandleTimeframe,
-} from "@bitbank-ai-trader/shared";
+} from "@noctas/shared";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { CyberPanel } from "@/components/ui/CyberPanel";
 import { CyberButton } from "@/components/ui/CyberButton";

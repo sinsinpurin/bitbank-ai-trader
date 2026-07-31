@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Box, HStack, Input, Stack, Text, chakra } from "@chakra-ui/react";
-import type { SignalOperand, SignalWatch, SignalWatchConfig } from "@bitbank-ai-trader/shared";
+import type { SignalOperand, SignalWatch, SignalWatchConfig } from "@noctas/shared";
 import { CyberButton } from "@/components/ui/CyberButton";
 import {
   createSignalWatch,

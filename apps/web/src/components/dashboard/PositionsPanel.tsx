@@ -1,7 +1,7 @@
 "use client";
 
 import { Box, HStack, Stack, Text } from "@chakra-ui/react";
-import type { Position } from "@bitbank-ai-trader/shared";
+import type { Position } from "@noctas/shared";
 
 function formatJpy(value: number) {
   return `¥${Math.round(value).toLocaleString("ja-JP")}`;

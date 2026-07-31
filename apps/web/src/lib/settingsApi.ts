@@ -2,7 +2,7 @@ import type {
   AppSettings,
   CircuitBreakerStatus,
   SettingsResponse,
-} from "@bitbank-ai-trader/shared";
+} from "@noctas/shared";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 

@@ -1,4 +1,4 @@
-const STORAGE_KEY = "bitbank-ai-trader:pending-review-context";
+const STORAGE_KEY = "noctas:pending-review-context";
 
 /**
  * P&L ReportのAI Reviewの結果をBot Blueprint(AI Strategy Gen)へ引き継ぐための

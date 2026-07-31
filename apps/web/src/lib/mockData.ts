@@ -1,5 +1,5 @@
 import type { CandlestickData, UTCTimestamp } from "lightweight-charts";
-import type { Position, Trade } from "@bitbank-ai-trader/shared";
+import type { Position, Trade } from "@noctas/shared";
 
 /** ダミーのローソク足データ生成(BTC/JPY風の値動き) */
 export function generateMockCandles(count = 120): CandlestickData[] {
