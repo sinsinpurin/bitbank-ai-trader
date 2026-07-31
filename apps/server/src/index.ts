@@ -64,6 +64,7 @@ async function main() {
   app.get("/api/pairs", async () => ({
     pairs: config.targetPairs,
     primaryPair: config.targetPair,
+    maxPositionJpy: config.risk.maxPositionJpy,
   }));
 
   // Bot/エディタ/Webチャート共用のローソク足履歴(1分足バッファをtimeframeへ集計して返す)
