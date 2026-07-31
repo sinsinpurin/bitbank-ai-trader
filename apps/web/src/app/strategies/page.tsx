@@ -387,12 +387,24 @@ function StrategyEditor() {
 
   return (
     <LiveValuesContext.Provider value={liveValues}>
+    <Stack gap={6} px={{ base: 4, md: 10 }} py={8} flex="1">
+      {/* 最重要かつ最も操作頻度が高いため、キャンバスより上・全幅の横並びで配置する */}
+      <CyberPanel title="Deployed Strategies" code="00 / OPS" accent="red" collapsible>
+        <Box maxH="260px" overflowY="auto" pr={1}>
+          <StrategyList
+            strategies={strategies}
+            selectedId={selectedId}
+            onLoad={handleLoad}
+            onToggleActive={handleToggleActive}
+            onDelete={handleDelete}
+            layout="horizontal"
+          />
+        </Box>
+      </CyberPanel>
+
     <Grid
       templateColumns={{ base: "1fr", lg: "200px 1fr 300px" }}
       gap={6}
-      px={{ base: 4, md: 10 }}
-      py={8}
-      flex="1"
     >
       <GridItem>
         <CyberPanel title="Node Palette" code="01 / KIT" accent="cyan" collapsible>
@@ -555,23 +567,13 @@ function StrategyEditor() {
               <TemplateGallery onLoad={handleLoadTemplate} />
             </Box>
           </CyberPanel>
-          <CyberPanel title="Deployed Strategies" code="05 / OPS" accent="red" collapsible>
-            <Box maxH="360px" overflowY="auto" pr={1}>
-              <StrategyList
-                strategies={strategies}
-                selectedId={selectedId}
-                onLoad={handleLoad}
-                onToggleActive={handleToggleActive}
-                onDelete={handleDelete}
-              />
-            </Box>
-          </CyberPanel>
-          <CyberPanel title="Bot Signal Feed" code="06 / SIG" accent="cyan" collapsible>
+          <CyberPanel title="Bot Signal Feed" code="05 / SIG" accent="cyan" collapsible>
             <BotSignalFeed signals={botSignals} />
           </CyberPanel>
         </Stack>
       </GridItem>
     </Grid>
+    </Stack>
     </LiveValuesContext.Provider>
   );
 }

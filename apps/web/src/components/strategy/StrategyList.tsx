@@ -1,6 +1,6 @@
 "use client";
 
-import { Box, HStack, Stack, Text } from "@chakra-ui/react";
+import { Box, HStack, Text, Wrap } from "@chakra-ui/react";
 import type { Strategy } from "@bitbank-ai-trader/shared";
 import { CyberButton } from "@/components/ui/CyberButton";
 import { ZoneTag } from "@/components/ui/ZoneTag";
@@ -11,6 +11,8 @@ interface StrategyListProps {
   onLoad: (strategy: Strategy) => void;
   onToggleActive: (strategy: Strategy) => void;
   onDelete: (strategy: Strategy) => void;
+  /** "horizontal"は横並び(折り返しあり)のカードグリッド。既定は縦積み */
+  layout?: "vertical" | "horizontal";
 }
 
 export function StrategyList({
@@ -19,6 +21,7 @@ export function StrategyList({
   onLoad,
   onToggleActive,
   onDelete,
+  layout = "vertical",
 }: StrategyListProps) {
   if (strategies.length === 0) {
     return (
@@ -29,7 +32,7 @@ export function StrategyList({
   }
 
   return (
-    <Stack gap={3}>
+    <Wrap gap={3}>
       {strategies.map((strategy) => {
         const selected = strategy.id === selectedId;
         return (
@@ -40,6 +43,7 @@ export function StrategyList({
             borderColor={selected ? "signal.cyan" : "border.gridCyan"}
             boxShadow={selected ? "glowCyanSm" : "none"}
             p={3}
+            width={layout === "horizontal" ? "280px" : "100%"}
           >
             <HStack justify="space-between" mb={2} gap={3}>
               <Text
@@ -82,6 +86,6 @@ export function StrategyList({
           </Box>
         );
       })}
-    </Stack>
+    </Wrap>
   );
 }
