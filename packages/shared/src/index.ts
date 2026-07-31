@@ -78,13 +78,15 @@ export interface Position {
 }
 
 /** 約定の発生理由。ai_decisionは廃止された旧AI判断ループの名残(過去データ表示用に残置)。
- *  現在の新規約定はBot戦略(ai_judgmentノードを含む場合も)経由でbot_strategyになる */
+ *  現在の新規約定はBot戦略(ai_judgmentノードを含む場合も)経由でbot_strategyになる。
+ *  manualはダッシュボードの手動決済ボタンから成行決済した場合 */
 export type TradeReason =
   | "ai_decision"
   | "stop_loss"
   | "bot_strategy"
   | "take_profit"
-  | "trailing_stop";
+  | "trailing_stop"
+  | "manual";
 
 /** ペーパートレードにおける仮想約定履歴 */
 export interface Trade {

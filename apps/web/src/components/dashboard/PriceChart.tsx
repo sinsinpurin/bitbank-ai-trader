@@ -7,27 +7,39 @@ import {
   ColorType,
   createChart,
   createSeriesMarkers,
+  LineStyle,
   type CandlestickData,
   type IChartApi,
+  type IPriceLine,
   type ISeriesApi,
   type ISeriesMarkersPluginApi,
   type SeriesMarker,
   type Time,
 } from "lightweight-charts";
 
+/** 保有中ポジションの建値ライン表示用(チャート側はPosition型に依存させないための最小情報) */
+export interface EntryPriceLine {
+  id: string;
+  price: number;
+  label: string;
+}
+
 interface PriceChartProps {
   data: CandlestickData[];
   /** 約定・シグナルの発生位置に表示するマーカー(時刻昇順) */
   markers?: SeriesMarker<Time>[];
+  /** 保有中ポジションの建値に引く水平線(現在選択中のペア分のみ渡すこと) */
+  entryPriceLines?: EntryPriceLine[];
   /** ペア・時間足切替などズームをリセットしてよいタイミングでのみ変更するキー */
   resetKey?: string;
 }
 
-export function PriceChart({ data, markers, resetKey }: PriceChartProps) {
+export function PriceChart({ data, markers, entryPriceLines, resetKey }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const markersApiRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+  const priceLinesRef = useRef<IPriceLine[]>([]);
   // resetKeyが変わった後、最初にデータが届いたタイミングでのみfitContentするためのフラグ
   const pendingFitRef = useRef(true);
 
@@ -69,6 +81,9 @@ export function PriceChart({ data, markers, resetKey }: PriceChartProps) {
     chartRef.current = chart;
     seriesRef.current = series;
     markersApiRef.current = null;
+    // chart.remove()が既存の建値ラインも内部で破棄するため、ハンドルだけ空にしておく
+    // (破棄済みハンドルにremovePriceLineを呼ばないように)
+    priceLinesRef.current = [];
 
     const handleResize = () => {
       chart.applyOptions({ width: container.clientWidth });
@@ -80,6 +95,7 @@ export function PriceChart({ data, markers, resetKey }: PriceChartProps) {
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
+      priceLinesRef.current = [];
       markersApiRef.current = null;
     };
   }, []);
@@ -109,6 +125,26 @@ export function PriceChart({ data, markers, resetKey }: PriceChartProps) {
       markersApiRef.current.setMarkers(markers ?? []);
     }
   }, [markers]);
+
+  // 建値ラインの更新。件数が少なく(通常AI_MAX_OPEN_POSITIONS以下)頻繁にも変わらないため、
+  // 差分更新はせず毎回全て引き直す
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series) return;
+    for (const line of priceLinesRef.current) {
+      series.removePriceLine(line);
+    }
+    priceLinesRef.current = (entryPriceLines ?? []).map((entry) =>
+      series.createPriceLine({
+        price: entry.price,
+        color: "#FCEE0A",
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: entry.label,
+      })
+    );
+  }, [entryPriceLines]);
 
   return <Box ref={containerRef} width="100%" height="360px" />;
 }

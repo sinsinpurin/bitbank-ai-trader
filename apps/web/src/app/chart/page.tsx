@@ -12,7 +12,7 @@ import {
 import { AppHeader } from "@/components/ui/AppHeader";
 import { CyberPanel } from "@/components/ui/CyberPanel";
 import { CyberButton } from "@/components/ui/CyberButton";
-import { PriceChart } from "@/components/dashboard/PriceChart";
+import { PriceChart, type EntryPriceLine } from "@/components/dashboard/PriceChart";
 import { SignalMonitorPanel } from "@/components/dashboard/SignalMonitorPanel";
 import { BotSignalFeedPanel } from "@/components/dashboard/BotSignalFeedPanel";
 import { useServerEvents } from "@/lib/useServerEvents";
@@ -30,9 +30,26 @@ export default function ChartPage() {
   }, [pairs, primaryPair, selectedPair]);
 
   const [timeframe, setTimeframe] = useState<CandleTimeframe>(DEFAULT_CANDLE_TIMEFRAME);
-  const { connected, candles, trades, botSignals } = useServerEvents([], selectedPair, timeframe);
+  const { connected, candles, positions, trades, botSignals } = useServerEvents(
+    [],
+    selectedPair,
+    timeframe
+  );
   const [showTradeMarkers, setShowTradeMarkers] = useState(true);
   const [showSignalMarkers, setShowSignalMarkers] = useState(true);
+
+  // 保有中ポジションの建値ライン(選択中ペアのみ)
+  const entryPriceLines = useMemo<EntryPriceLine[]>(
+    () =>
+      positions
+        .filter((p) => p.closedAt === null && p.pair === selectedPair)
+        .map((p) => ({
+          id: p.id,
+          price: p.entryPrice,
+          label: `建値 ¥${Math.round(p.entryPrice).toLocaleString("ja-JP")}`,
+        })),
+    [positions, selectedPair]
+  );
 
   // チャートマーカー: 約定(▲買い/▼売り)+ 見送りシグナル(●)。選択中の時間足のバケットに合わせる
   const chartMarkers = useMemo<SeriesMarker<Time>[]>(() => {
@@ -136,7 +153,12 @@ export default function ChartPage() {
                   ● 見送りシグナル
                 </CyberButton>
               </HStack>
-              <PriceChart data={candles} markers={chartMarkers} resetKey={`${selectedPair}-${timeframe}`} />
+              <PriceChart
+                data={candles}
+                markers={chartMarkers}
+                entryPriceLines={entryPriceLines}
+                resetKey={`${selectedPair}-${timeframe}`}
+              />
             </CyberPanel>
           </GridItem>
 

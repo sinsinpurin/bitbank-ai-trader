@@ -21,6 +21,7 @@ import { strategyRoutes } from "./strategy/routes";
 import { pnlRoutes } from "./pnl/routes";
 import { settingsRoutes } from "./settings/routes";
 import { signalRoutes } from "./signals/routes";
+import { tradingRoutes } from "./trading/routes";
 import {
   DEFAULT_CANDLE_TIMEFRAME,
   isCandleTimeframe,
@@ -106,6 +107,7 @@ async function main() {
   await app.register(pnlRoutes);
   await app.register(settingsRoutes);
   await app.register(signalRoutes);
+  await app.register(tradingRoutes);
 
   app.register(async (instance) => {
     instance.get("/ws", { websocket: true }, (socket) => {

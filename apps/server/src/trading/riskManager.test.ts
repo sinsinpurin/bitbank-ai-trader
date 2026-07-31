@@ -20,7 +20,9 @@ vi.mock("./paperTradingEngine", () => ({
 
 vi.mock("../ws/relay", () => ({ broadcast: vi.fn() }));
 
-const { checkExits } = await import("./riskManager");
+const { checkExits, isClosingInFlight, markClosingStart, markClosingDone } = await import(
+  "./riskManager"
+);
 
 function makePosition(overrides: Partial<PrismaPosition> = {}): PrismaPosition {
   return {
@@ -174,5 +176,29 @@ describe("checkExits / multiple positions", () => {
     await checkExits("btc_jpy", 10_010_000); // +0.1%: only "hit" clears its take-profit
     expect(closePosition).toHaveBeenCalledTimes(1);
     expect(closePosition.mock.calls[0][0].id).toBe("hit");
+  });
+});
+
+describe("checkExits / concurrency guard skips a position already marked as closing", () => {
+  it("does not attempt to close a position mid-close, even if its exit condition is met", async () => {
+    findMany.mockResolvedValue([makePosition({ id: "in-flight-guard-test", takeProfitPct: 0.1 })]);
+    markClosingStart("in-flight-guard-test");
+    try {
+      await checkExits("btc_jpy", 10_010_000); // would otherwise clear take-profit
+      expect(closePosition).not.toHaveBeenCalled();
+    } finally {
+      markClosingDone("in-flight-guard-test");
+    }
+  });
+});
+
+describe("isClosingInFlight / markClosingStart / markClosingDone", () => {
+  it("exposes the same in-flight guard that checkExits uses internally, for manual-close routes to share", () => {
+    const id = "guard-fn-test";
+    expect(isClosingInFlight(id)).toBe(false);
+    markClosingStart(id);
+    expect(isClosingInFlight(id)).toBe(true);
+    markClosingDone(id);
+    expect(isClosingInFlight(id)).toBe(false);
   });
 });

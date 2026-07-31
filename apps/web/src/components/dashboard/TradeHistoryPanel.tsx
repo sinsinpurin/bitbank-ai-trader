@@ -14,6 +14,7 @@ const REASON_STYLE: Record<Trade["reason"], { label: string; color: string }> = 
   stop_loss: { label: "損切り", color: "#FF8A1E" },
   take_profit: { label: "利確", color: "#39FF88" },
   trailing_stop: { label: "トレーリング", color: "#FF8A1E" },
+  manual: { label: "手動決済", color: "#FCEE0A" },
 };
 
 function formatJpy(value: number) {

@@ -5,8 +5,22 @@ import { closePosition } from "./paperTradingEngine";
 import { toPositionEvent, toTradeEvent } from "./mappers";
 import type { TradeReason } from "@noctas/shared";
 
-// 決済処理が完了するまでの間、同一ポジションを二重に決済しないためのガード
+// 決済処理が完了するまでの間、同一ポジションを二重に決済しないためのガード。
+// 自動決済(このファイル)と手動決済(trading/routes.ts)の両方が同じSetを共有することで、
+// 「損切り条件に達した瞬間に手動決済ボタンも押された」ような競合を防ぐ
 const closingInFlight = new Set<string>();
+
+export function isClosingInFlight(positionId: string): boolean {
+  return closingInFlight.has(positionId);
+}
+
+export function markClosingStart(positionId: string): void {
+  closingInFlight.add(positionId);
+}
+
+export function markClosingDone(positionId: string): void {
+  closingInFlight.delete(positionId);
+}
 
 /**
  * 保有中の全ポジションを現在値で評価し、出口条件に達していれば自動決済する。
