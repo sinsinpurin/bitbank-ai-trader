@@ -264,20 +264,32 @@ function toGraph(raw: RawStrategyOutput): StrategyGraph {
 const MAX_ATTEMPTS = 2;
 
 /**
+ * 要望メッセージを組み立てる。取引レビュー(P&L ReportのAI Review結果)が引き継がれている場合、
+ * その内容(懸念点・改善提案)を踏まえて設計するよう指示を追加する。
+ */
+export function buildUserMessage(prompt: string, reviewContext?: string): string {
+  const base = `次の要望に沿ったBot戦略グラフを設計してください。\n\n要望: ${prompt}`;
+  const review = reviewContext?.trim();
+  if (!review) return base;
+  return `${base}\n\n## 参考: 直近の取引レビュー(AIによる分析結果)\n${review}\n\nこのレビューで指摘された懸念点・改善提案を踏まえて設計すること(レビューの内容と要望が矛盾する場合は要望を優先すること)。`;
+}
+
+/**
  * 自由文の要望からBot戦略グラフを生成する。
  * Claudeにツール強制呼び出しで構造化グラフを出力させ、サーバー側で
  * ポート型・接続・実行時エラーを検証。不合格なら検証エラーをフィードバックして1回だけ再生成させる。
  */
 export async function generateStrategyFromPrompt(
   prompt: string,
-  pair: string = config.targetPair
+  pair: string = config.targetPair,
+  reviewContext?: string
 ): Promise<GeneratedStrategy> {
   const model = config.ai.strategyModel;
   const systemPrompt = buildSystemPrompt(pair);
   const messages: Anthropic.MessageParam[] = [
     {
       role: "user",
-      content: `次の要望に沿ったBot戦略グラフを設計してください。\n\n要望: ${prompt}`,
+      content: buildUserMessage(prompt, reviewContext),
     },
   ];
 
