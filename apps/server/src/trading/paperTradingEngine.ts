@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { prisma } from "../db/prisma";
 import { config } from "../config";
 import type { Position } from "@prisma/client";
@@ -208,6 +209,12 @@ export async function openBuyPosition(
     return { trade: null, position: null };
   }
 
+  // position.create/trade.createを同一トランザクション内の配列として並べているため、
+  // 片方の結果(自動生成id)をもう片方のdataから参照できない。決済側のTradeは既存の
+  // position.idにpositionIdを設定できているのに対し、ここではその参照ができず、
+  // 建玉側のTradeがpositionに紐付かなくなる不具合があったため、idを先に採番して両方に渡す。
+  const positionId = randomUUID();
+
   const [, , position, trade] = await prisma.$transaction([
     prisma.virtualBalance.update({
       where: { currency: "jpy" },
@@ -219,6 +226,7 @@ export async function openBuyPosition(
     }),
     prisma.position.create({
       data: {
+        id: positionId,
         pair,
         side: "buy",
         entryPrice: execPrice,
@@ -241,6 +249,7 @@ export async function openBuyPosition(
         fee: entryFee,
         aiDecisionId: options.aiDecisionLogId,
         strategyId: options.strategyId,
+        positionId,
       },
     }),
   ]);
