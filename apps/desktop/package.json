@@ -1,0 +1,16 @@
+{
+  "name": "@noctas/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "npm run build && electron .",
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "electron": "^43.2.0",
+    "typescript": "^5.6.3"
+  }
+}
