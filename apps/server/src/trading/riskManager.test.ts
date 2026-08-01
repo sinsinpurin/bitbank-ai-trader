@@ -83,6 +83,64 @@ describe("checkExits / take profit", () => {
     await checkExits("btc_jpy", 10_049_000);
     expect(closePosition).not.toHaveBeenCalled();
   });
+
+  it("falls back to the global take-profit %% when the position has no override", async () => {
+    findMany.mockResolvedValue([makePosition({ takeProfitPct: null })]);
+    const belowGlobal = 10_000_000 * (1 + (config.risk.takeProfitPct - 0.5) / 100);
+    await checkExits("btc_jpy", belowGlobal);
+    expect(closePosition).not.toHaveBeenCalled(); // no upside protection would close here previously
+
+    const triggerPrice = 10_000_000 * (1 + config.risk.takeProfitPct / 100);
+    await checkExits("btc_jpy", triggerPrice);
+    expect(closePosition).toHaveBeenCalledTimes(1);
+    expect(closePosition.mock.calls[0][2]).toBe("take_profit");
+  });
+
+  it("uses the position's own take-profit %% when set, instead of the global default", async () => {
+    const override = config.risk.takeProfitPct + 10;
+    findMany.mockResolvedValue([makePosition({ takeProfitPct: override })]);
+    const globalTriggerPrice = 10_000_000 * (1 + config.risk.takeProfitPct / 100);
+    await checkExits("btc_jpy", globalTriggerPrice);
+    expect(closePosition).not.toHaveBeenCalled(); // global threshold alone must not fire
+
+    const overrideTriggerPrice = 10_000_000 * (1 + override / 100);
+    await checkExits("btc_jpy", overrideTriggerPrice);
+    expect(closePosition).toHaveBeenCalledTimes(1);
+    expect(closePosition.mock.calls[0][2]).toBe("take_profit");
+  });
+
+  it("clamps a take-profit %% below the round-trip cost up to that cost", async () => {
+    const tooLow = config.fees.roundTripCostPct / 2;
+    findMany.mockResolvedValue([makePosition({ takeProfitPct: tooLow })]);
+    // the position's own (fee-losing) line is cleared here, but the clamp must hold the exit back
+    await checkExits("btc_jpy", 10_000_000 * (1 + tooLow / 100));
+    expect(closePosition).not.toHaveBeenCalled();
+
+    const clampedTrigger = 10_000_000 * (1 + config.fees.roundTripCostPct / 100);
+    await checkExits("btc_jpy", clampedTrigger);
+    expect(closePosition).toHaveBeenCalledTimes(1);
+    expect(closePosition.mock.calls[0][2]).toBe("take_profit");
+  });
+
+  it("treats takeProfitPct 0 as 'disabled' and never takes profit, however far price rises", async () => {
+    findMany.mockResolvedValue([makePosition({ takeProfitPct: 0 })]);
+    // 0 must NOT fall back to the global default nor to the round-trip cost floor
+    await checkExits("btc_jpy", 10_000_000 * (1 + (config.risk.takeProfitPct + 50) / 100));
+    expect(closePosition).not.toHaveBeenCalled();
+  });
+
+  it("still honors trailing stop and stop loss when take profit is disabled with 0", async () => {
+    findMany.mockResolvedValue([
+      makePosition({ takeProfitPct: 0, trailingStopPct: 0.3, highestPrice: 10_200_000 }),
+    ]);
+    await checkExits("btc_jpy", 10_200_000 * (1 - 0.3 / 100));
+    expect(closePosition.mock.calls[0][2]).toBe("trailing_stop");
+
+    closePosition.mockClear();
+    findMany.mockResolvedValue([makePosition({ takeProfitPct: 0, stopLossPct: 3 })]);
+    await checkExits("btc_jpy", 10_000_000 * (1 - 3 / 100));
+    expect(closePosition.mock.calls[0][2]).toBe("stop_loss");
+  });
 });
 
 describe("checkExits / trailing stop", () => {
@@ -113,11 +171,11 @@ describe("checkExits / trailing stop", () => {
 
   it("take_profit wins over trailing_stop when both conditions are met on the same tick", async () => {
     findMany.mockResolvedValue([
-      makePosition({ takeProfitPct: 0.1, trailingStopPct: 5, highestPrice: 10_000_000 }),
+      makePosition({ takeProfitPct: 0.5, trailingStopPct: 5, highestPrice: 10_000_000 }),
     ]);
-    // +0.1% clears take-profit; it's nowhere near a 5% trailing pullback, so this also
+    // +0.5% clears take-profit; it's nowhere near a 5% trailing pullback, so this also
     // isolates that take_profit is checked (and wins) before trailing is even considered
-    await checkExits("btc_jpy", 10_010_000);
+    await checkExits("btc_jpy", 10_050_000);
     expect(closePosition.mock.calls[0][2]).toBe("take_profit");
   });
 });
@@ -171,9 +229,9 @@ describe("checkExits / multiple positions", () => {
   it("only closes the positions whose own conditions are met", async () => {
     findMany.mockResolvedValue([
       makePosition({ id: "safe", takeProfitPct: 5 }),
-      makePosition({ id: "hit", takeProfitPct: 0.1 }),
+      makePosition({ id: "hit", takeProfitPct: 0.5 }),
     ]);
-    await checkExits("btc_jpy", 10_010_000); // +0.1%: only "hit" clears its take-profit
+    await checkExits("btc_jpy", 10_050_000); // +0.5%: only "hit" clears its take-profit
     expect(closePosition).toHaveBeenCalledTimes(1);
     expect(closePosition.mock.calls[0][0].id).toBe("hit");
   });
@@ -181,10 +239,10 @@ describe("checkExits / multiple positions", () => {
 
 describe("checkExits / concurrency guard skips a position already marked as closing", () => {
   it("does not attempt to close a position mid-close, even if its exit condition is met", async () => {
-    findMany.mockResolvedValue([makePosition({ id: "in-flight-guard-test", takeProfitPct: 0.1 })]);
+    findMany.mockResolvedValue([makePosition({ id: "in-flight-guard-test", takeProfitPct: 0.5 })]);
     markClosingStart("in-flight-guard-test");
     try {
-      await checkExits("btc_jpy", 10_010_000); // would otherwise clear take-profit
+      await checkExits("btc_jpy", 10_050_000); // would otherwise clear take-profit
       expect(closePosition).not.toHaveBeenCalled();
     } finally {
       markClosingDone("in-flight-guard-test");

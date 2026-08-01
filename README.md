@@ -42,6 +42,7 @@ AIが常に固定量で取引し続けて資産を溶かさないよう、`apps/
 - `AI_MAX_POSITION_JPY` — 1ポジションあたりの上限金額(円)。この金額をもとに購入数量を自動算出する
 - `AI_MAX_OPEN_POSITIONS` — 同時に保有できる未決済ポジション数の上限
 - `AI_STOP_LOSS_PCT` — この含み損率(%)に達したらAIの判断を待たず自動的に成行決済する(Claude APIは呼ばないためトークン課金は発生しない)
+- `AI_TAKE_PROFIT_PCT` — この含み益率(%)に達したら自動的に成行決済する。戦略ごとの利確%が未設定のときの既定値(戦略側で0を指定した場合は利確なし)
 
 ### 手数料・スリッページ用の環境変数
 
@@ -94,7 +95,7 @@ npm run test:coverage   # カバレッジ計測付きで実行(各ワークス�
 - 売買はBot Blueprint(ノードエディタで組む戦略グラフ)経由でのみ実行される。SMA/RSIなどの技術的条件に加え、
   「AI Judgment」ノードでClaudeによる売買判断(buy/sell/hold)を条件の一部として組み込める
   (低頻度・コスト管理付きでキャッシュされ、新しい判断が届いた瞬間だけ発火する)。
-- ポジションサイズ上限・同時保有数上限・自動損切りによるリスク管理(`AI_MAX_POSITION_JPY` / `AI_MAX_OPEN_POSITIONS` / `AI_STOP_LOSS_PCT`)。損切りは全tickerで評価され、AI呼び出し(課金)は発生しない。
+- ポジションサイズ上限・同時保有数上限・自動損切り・自動利確によるリスク管理(`AI_MAX_POSITION_JPY` / `AI_MAX_OPEN_POSITIONS` / `AI_STOP_LOSS_PCT` / `AI_TAKE_PROFIT_PCT`)。損切り・利確は全tickerで評価され、AI呼び出し(課金)は発生しない。
 - `apps/web`のダッシュボードはサーバーのWebSocket(`/ws`)に接続し、ticker/ポジション更新/約定/AI利用状況をリアルタイム表示する。約定履歴は`GET /api/trades`で初期取得後、WebSocketで追記される。未接続時は初期シードのダミーデータを表示する。
 - UIテーマは Cyberpunk 2077 の UI カラーパレット(黒 `#000000` / 黄 `#f3e600` / シアン `#55ead4` / 深紅 `#c5003c` / 暗赤 `#880425`)を採用。
 

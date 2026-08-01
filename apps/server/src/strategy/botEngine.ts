@@ -59,6 +59,8 @@ interface ActiveStrategy {
   name: string;
   pair: string;
   graph: StrategyGraph;
+  /** positionノードを含むか(含む戦略があるtickでのみ建玉数を問い合わせる) */
+  usesPositionNode: boolean;
   /** 戦略ごとのリスク設定(nullはグローバル設定へフォールバック) */
   positionSizeJpy: number | null;
   maxOpenPositions: number | null;
@@ -238,6 +240,7 @@ export async function reloadActiveStrategies() {
         name: row.name,
         pair: row.pair,
         graph,
+        usesPositionNode: graph.nodes.some((n) => n.type === "position"),
         positionSizeJpy: row.positionSizeJpy,
         maxOpenPositions: row.maxOpenPositions,
         stopLossPct: row.stopLossPct,
@@ -381,6 +384,20 @@ export async function onTick(pair: string, price: number, timestampMs: number, v
     // このペアのAI判断キャッシュは全戦略で共通(ai_judgmentノードを含む戦略のみが実質的に使う)
     const judgment = getJudgment(pair);
 
+    // positionノードを使う戦略がある場合のみ、tickあたり1回だけ建玉数をまとめて取得する
+    // (tickは高頻度なので、無条件に問い合わせるとDBラウンドトリップが増える)
+    const openPositionCounts = new Map<string, number>();
+    if (strategies.some((s) => s.usesPositionNode)) {
+      const grouped = await prisma.position.groupBy({
+        by: ["strategyId"],
+        where: { pair, side: "buy", closedAt: null },
+        _count: { _all: true },
+      });
+      for (const row of grouped) {
+        if (row.strategyId) openPositionCounts.set(row.strategyId, row._count._all);
+      }
+    }
+
     for (const strategy of strategies) {
       const cooldownMs = config.bot.cooldownMs;
       const firedAt = lastFiredAt.get(strategy.id) ?? 0;
@@ -390,6 +407,7 @@ export async function onTick(pair: string, price: number, timestampMs: number, v
       const isFresh = judgment !== null && judgment.updatedAt > lastSeenAt;
       const evaluation = evaluateGraph(strategy.graph, closes, {
         aiJudgment: judgment && { action: judgment.action, confidence: judgment.confidence, isFresh },
+        hasOpenPosition: (openPositionCounts.get(strategy.id) ?? 0) > 0,
       });
       if (judgment) lastSeenJudgmentAt.set(strategy.id, judgment.updatedAt);
 

@@ -51,6 +51,7 @@ import { LiveValuesContext } from "@/components/strategy/LiveValuesContext";
 import { createStrategy, deleteStrategy, fetchStrategies, updateStrategy } from "@/lib/strategyApi";
 import { useLiveCandles } from "@/lib/useLiveCandles";
 import { useAiJudgment } from "@/lib/useAiJudgment";
+import { useStrategyOpenPositions } from "@/lib/useStrategyOpenPositions";
 import { useServerEvents } from "@/lib/useServerEvents";
 import { pairLabel, usePairs } from "@/lib/pairs";
 import { takePendingReviewContext } from "@/lib/reviewHandoff";
@@ -317,6 +318,8 @@ function StrategyEditor() {
   const closes = useLiveCandles(pair);
   // AI Judgmentノードのライブプレビュー用(このペアの最新AI判断キャッシュを15秒間隔で取得)
   const aiJudgment = useAiJudgment(pair);
+  // Positionノードのライブプレビュー用(未保存のキャンバスは建玉なし=falseとして評価する)
+  const hasOpenPosition = useStrategyOpenPositions(selectedId);
   const liveValues = useMemo<Record<string, NodeLiveValue> | null>(() => {
     if (closes.length < 2) return null;
     return evaluateGraph(toGraph(nodes, edges), closes, {
@@ -327,8 +330,9 @@ function StrategyEditor() {
         confidence: aiJudgment.confidence,
         isFresh: true,
       },
+      hasOpenPosition,
     }).nodeValues;
-  }, [nodes, edges, closes, aiJudgment]);
+  }, [nodes, edges, closes, aiJudgment, hasOpenPosition]);
 
   const handleLoadTemplate = useCallback(
     (template: StrategyTemplate) => {
@@ -544,6 +548,14 @@ function StrategyEditor() {
                     aiJudgment.confidence * 100
                   )}%, ${new Date(aiJudgment.updatedAt).toLocaleTimeString("ja-JP", { hour12: false })}時点)`
                 : "AI JUDGMENT: まだ判断がありません(戦略をDeployすると数分以内に初回取得されます)"}
+            </Text>
+          )}
+
+          {nodes.some((n) => n.type === "position") && (
+            <Text fontFamily="mono" fontSize="10px" color="text.disabled">
+              {selectedId
+                ? `POSITION: この戦略は現在${hasOpenPosition ? "建玉を保有中" : "建玉なし"}です(15秒ごと更新)`
+                : "POSITION: 未保存のためプレビューは「建玉なし」で評価しています"}
             </Text>
           )}
 

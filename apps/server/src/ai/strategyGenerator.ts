@@ -20,6 +20,7 @@ const NODE_SPEC: Record<
 > = {
   price: { inputs: {}, output: "number" },
   constant: { inputs: {}, output: "number" },
+  position: { inputs: {}, output: "bool" },
   sma: { inputs: { in: "number" }, output: "number" },
   ema: { inputs: { in: "number" }, output: "number" },
   rsi: { inputs: { in: "number" }, output: "number" },
@@ -46,6 +47,9 @@ const buildSystemPrompt = (pair: string) => `あなたは${pairLabel(pair)}の1�
 
 - price: 入力なし → 出力 out(number)。${pairLabel(pair)}の終値(1分足)
 - constant: 入力なし → 出力 out(number)。params.value に固定値(RSIしきい値など)
+- position: 入力なし → 出力 out(bool)。この戦略が${pairLabel(pair)}で未決済の建玉を持っているかを表す。
+  params.state = "none"(建玉なしのとき真, 既定)|"holding"(建玉ありのとき真)。
+  logic(and)でエントリー条件と組み合わせ、「建玉が無いときだけ買う」等のゲートに使う。
 - sma / ema: 入力 in(number, 未接続なら終値) → 出力 out(number)。params.period(1以上の整数)
 - rsi: 入力 in(number, 未接続なら終値) → 出力 out(number, 0-100)。params.period(2以上の整数, 通常14)
 - compare: 入力 a, b(number) → 出力 out(bool)。params.op = "gt"|"lt"|"gte"|"lte"(a op b)
@@ -98,6 +102,7 @@ const STRATEGY_TOOL = {
                 },
                 expect: { type: "string" as const, enum: ["buy", "sell"] },
                 minConfidence: { type: "number" as const },
+                state: { type: "string" as const, enum: ["none", "holding"] },
               },
             },
           },
@@ -214,6 +219,12 @@ function validateGraph(graph: StrategyGraph): string[] {
       const period = Number(node.params.period);
       if (!Number.isInteger(period) || period < 1 || period > 400) {
         errors.push(`${node.type} ノード(${node.id})のperiodが不正です: ${node.params.period}`);
+      }
+    }
+    if (node.type === "position") {
+      const state = node.params.state;
+      if (state !== undefined && state !== "none" && state !== "holding") {
+        errors.push(`position ノード(${node.id})のstateはnone/holdingのいずれかである必要があります`);
       }
     }
     if (node.type === "ai_judgment") {

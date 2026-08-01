@@ -75,6 +75,11 @@ export interface EvaluateOptions {
    * 未指定(undefined/null)の場合、ai_judgmentノードは常にfalseを返す。
    */
   aiJudgment?: { action: AiAction; confidence: number; isFresh: boolean } | null;
+  /**
+   * positionノード用。この戦略がこのペアで未決済の建玉を持っているか。
+   * 未指定の場合はfalse(建玉なし)として扱う。
+   */
+  hasOpenPosition?: boolean;
 }
 
 export function evaluateGraph(
@@ -198,6 +203,18 @@ export function evaluateGraph(
         break;
       }
 
+      case "position": {
+        const expect = stringParam(node, "state", "none");
+        const holding = options.hasOpenPosition ?? false;
+        // ai_judgmentと違いシリーズ全体を現在の状態で埋める。これにより「建玉なし AND クロス」は
+        // クロスの瞬間ちょうどに立ち上がり、建玉を持っている間は再発火しない。
+        // 副作用として、RSIのようなレベル系条件と組み合わせた場合は、決済直後のtickで条件が
+        // まだ真のままだと(このノードの出力が過去分も含めて真に変わるため)エッジが立たず
+        // 再エントリーが1tick分だけ抑止される。クロス系条件と組み合わせるのが最も素直に働く
+        result = new Array<boolean>(length).fill(expect === "holding" ? holding : !holding);
+        break;
+      }
+
       case "ai_judgment": {
         const expect = stringParam(node, "expect", "buy");
         const minConfidence = numberParam(node, "minConfidence", 0);
@@ -255,7 +272,12 @@ export function evaluateGraph(
       const last = series && length > 0 ? series[length - 1] : null;
       if (typeof last === "boolean" || (typeof last === "number" && Number.isFinite(last))) {
         nodeValues[node.id] = last;
-      } else if (node.type === "compare" || node.type === "cross" || node.type === "logic") {
+      } else if (
+        node.type === "compare" ||
+        node.type === "cross" ||
+        node.type === "logic" ||
+        node.type === "position"
+      ) {
         // 条件系は入力未接続・データ不足でも「不成立」として扱う
         nodeValues[node.id] = false;
       } else {

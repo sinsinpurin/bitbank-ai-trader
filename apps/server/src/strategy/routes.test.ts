@@ -25,6 +25,28 @@ describe("validateRiskSettings / positionSizeJpy cap", () => {
   });
 });
 
+describe("validateRiskSettings / takeProfitPct round-trip cost floor", () => {
+  it("accepts a takeProfitPct at or above the round-trip cost", () => {
+    expect(validateRiskSettings({ takeProfitPct: config.fees.roundTripCostPct })).toBeNull();
+    expect(validateRiskSettings({ takeProfitPct: config.fees.roundTripCostPct + 1 })).toBeNull();
+  });
+
+  it("rejects a takeProfitPct below the round-trip cost", () => {
+    const error = validateRiskSettings({ takeProfitPct: config.fees.roundTripCostPct / 2 });
+    expect(error).not.toBeNull();
+    expect(error).toContain("利確%");
+  });
+
+  it("does not enforce the floor when takeProfitPct is unset (falls back to global default)", () => {
+    expect(validateRiskSettings({ takeProfitPct: null })).toBeNull();
+  });
+
+  it("accepts 0 as an explicit 'no take profit' setting, but still rejects negatives", () => {
+    expect(validateRiskSettings({ takeProfitPct: 0 })).toBeNull();
+    expect(validateRiskSettings({ takeProfitPct: -1 })).not.toBeNull();
+  });
+});
+
 describe("validateRiskSettings / other fields unaffected", () => {
   it("still validates maxOpenPositions independently of the positionSizeJpy cap", () => {
     expect(validateRiskSettings({ maxOpenPositions: 0 })).not.toBeNull();

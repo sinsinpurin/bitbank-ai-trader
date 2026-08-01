@@ -46,6 +46,10 @@ function resolveTargetPairs(): string[] {
 
 const targetPairs = resolveTargetPairs();
 
+// 往復コスト(roundTripCostPct)の算出に使うため、config本体より先に読んでおく
+const takerFeePct = Number(process.env.TRADE_FEE_PCT ?? 0.12);
+const slippagePct = Number(process.env.TRADE_SLIPPAGE_PCT ?? 0.02);
+
 export const config = {
   port: Number(process.env.PORT ?? 4000),
   // "paper"のみ対応(実運用注文APIは呼び出さない)。ペーパートレードのリセットはpaperモードでのみ許可する
@@ -92,9 +96,14 @@ export const config = {
   },
   fees: {
     // ペーパートレードに反映する取引手数料(%)。bitbank現物のtaker手数料は0.12%
-    takerFeePct: Number(process.env.TRADE_FEE_PCT ?? 0.12),
+    takerFeePct,
     // 成行想定のスリッページ(%)。買いは高く、売りは安く約定する
-    slippagePct: Number(process.env.TRADE_SLIPPAGE_PCT ?? 0.02),
+    slippagePct,
+    // 利確ラインの下限として使う保守的な値(%)。
+    // entryPriceは既に約定時スリッページ込みで記録されるため、実際の損益分岐は理論上
+    // 「手数料2回分+スリッページ1回分」だが、ここでは両方を2回分として安全側に厳しく見積もる。
+    // 浮動小数の誤差(0.12+0.02→0.28000000000000003)で境界値がちょうど拒否されるのを防ぐため丸める
+    roundTripCostPct: Math.round(2 * (takerFeePct + slippagePct) * 1e6) / 1e6,
   },
   risk: {
     // 1ポジションあたりの上限金額(円)。この金額をもとに購入数量を算出する
@@ -103,5 +112,9 @@ export const config = {
     maxOpenPositions: Number(process.env.AI_MAX_OPEN_POSITIONS ?? 3),
     // この含み損率(%)に達したらAIの判断を待たず自動的に成行決済する
     stopLossPct: Number(process.env.AI_STOP_LOSS_PCT ?? 3),
+    // この含み益率(%)に達したらAIの判断を待たず自動的に成行決済する。
+    // 損切りと同様、戦略側で未設定でも上側の保護が効くようにグローバル既定値を持たせている
+    // (戦略側で0を指定した場合は利確なしの明示指定として扱われ、この既定値は使われない)
+    takeProfitPct: Number(process.env.AI_TAKE_PROFIT_PCT ?? 5),
   },
 };
