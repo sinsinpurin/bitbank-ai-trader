@@ -89,6 +89,7 @@ async function main() {
         highs: candles.map((c) => c.high),
         lows: candles.map((c) => c.low),
         closes: candles.map((c) => c.close),
+        volumes: candles.map((c) => c.volume),
       };
     }
   );
@@ -127,7 +128,7 @@ async function main() {
     checkExits(ticker.pair, ticker.last).catch((err) =>
       app.log.error(err, "出口条件チェックに失敗しました")
     );
-    onTick(ticker.pair, ticker.last, ticker.timestamp).catch((err) =>
+    onTick(ticker.pair, ticker.last, ticker.timestamp, ticker.vol).catch((err) =>
       app.log.error(err, "Bot戦略の評価に失敗しました")
     );
   });

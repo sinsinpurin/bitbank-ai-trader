@@ -21,25 +21,37 @@ const MAX_BOT_SIGNALS = 20;
 // 長時間画面を開きっぱなしにしてもメモリが際限なく増えないようにする(サーバー側の上限と揃える)
 const MAX_CANDLES = 1500;
 
+/** 出来高付きのローソク足(サーバーのCandleBucketに相当)。Volume系列描画にも使う */
+export type CandleWithVolume = CandlestickData & { volume: number };
+
 function applyTickerToCandles(
-  candles: CandlestickData[],
+  candles: CandleWithVolume[],
   last: number,
   timestampMs: number,
-  bucketSeconds: number
-): CandlestickData[] {
+  bucketSeconds: number,
+  volumeDelta: number
+): CandleWithVolume[] {
   const bucketTime = (Math.floor(timestampMs / 1000 / bucketSeconds) * bucketSeconds) as UTCTimestamp;
   const next = candles.slice();
   const lastCandle = next[next.length - 1];
 
   if (!lastCandle || lastCandle.time !== bucketTime) {
     const open = lastCandle ? lastCandle.close : last;
-    next.push({ time: bucketTime, open, high: Math.max(open, last), low: Math.min(open, last), close: last });
+    next.push({
+      time: bucketTime,
+      open,
+      high: Math.max(open, last),
+      low: Math.min(open, last),
+      close: last,
+      volume: volumeDelta,
+    });
   } else {
     next[next.length - 1] = {
       ...lastCandle,
       high: Math.max(lastCandle.high, last),
       low: Math.min(lastCandle.low, last),
       close: last,
+      volume: lastCandle.volume + volumeDelta,
     };
   }
 
@@ -54,12 +66,12 @@ function applyTickerToCandles(
  * 新規のフェッチ量・保持件数はMAX_CANDLESの範囲に収まる。
  */
 export function useServerEvents(
-  seedCandles: CandlestickData[],
+  seedCandles: CandleWithVolume[],
   candlePair?: string,
   timeframe: CandleTimeframe = "1min"
 ) {
   const [connected, setConnected] = useState(false);
-  const [candles, setCandles] = useState<CandlestickData[]>(seedCandles);
+  const [candles, setCandles] = useState<CandleWithVolume[]>(seedCandles);
   const [positions, setPositions] = useState<Position[]>([]);
   const [trades, setTrades] = useState<Trade[]>([]);
   const [usage, setUsage] = useState<AiUsageStats | null>(null);
@@ -69,12 +81,16 @@ export function useServerEvents(
   candlePairRef.current = candlePair;
   const bucketSecondsRef = useRef(minutesOfTimeframe(timeframe) * 60);
   bucketSecondsRef.current = minutesOfTimeframe(timeframe) * 60;
+  // 直近tickerの24時間出来高(vol)。サーバー側と同じ「差分を出来高として積算する」方式を
+  // クライアントでも再現するための基準値(ペア切替時にリセットしないと差分が暴れる)
+  const lastVolRef = useRef<number | undefined>(undefined);
 
   // ペア・時間足切り替え時: 履歴をリセットし、サーバーの集計済み終値でプレフィルする
   useEffect(() => {
     if (!candlePair) return;
     let cancelled = false;
     setCandles([]);
+    lastVolRef.current = undefined;
     fetch(`${API_URL}/api/candles?pair=${candlePair}&timeframe=${timeframe}`)
       .then((res) => (res.ok ? res.json() : null))
       .then(
@@ -85,16 +101,18 @@ export function useServerEvents(
             highs?: number[];
             lows?: number[];
             closes: number[];
+            volumes?: number[];
           } | null
         ) => {
           if (cancelled || !data || !Array.isArray(data.closes)) return;
-          // サーバーがOHLCを返す場合は本物のローソク足でプレフィルする
-          const prefilled: CandlestickData[] = data.times.map((time, i) => ({
+          // サーバーがOHLCVを返す場合は本物のローソク足でプレフィルする
+          const prefilled: CandleWithVolume[] = data.times.map((time, i) => ({
             time: time as UTCTimestamp,
             open: data.opens?.[i] ?? data.closes[i],
             high: data.highs?.[i] ?? data.closes[i],
             low: data.lows?.[i] ?? data.closes[i],
             close: data.closes[i],
+            volume: data.volumes?.[i] ?? 0,
           }));
           setCandles((prev) => (prev.length === 0 ? prefilled : prev));
         }
@@ -164,18 +182,25 @@ export function useServerEvents(
         }
 
         switch (parsed.type) {
-          case "ticker":
+          case "ticker": {
             // 表示対象ペア以外のtickerはローソク足へ混ぜない
             if (candlePairRef.current && parsed.payload.pair !== candlePairRef.current) break;
+            // サーバーと同じ「24時間出来高の差分を積算する」方式(botEngine.tsのtickVolumeDelta)を
+            // クライアント側でも再現する。負値(24時間窓境界での巻き戻り)は0扱いにする
+            const lastVol = lastVolRef.current;
+            lastVolRef.current = parsed.payload.vol;
+            const volumeDelta = lastVol === undefined ? 0 : Math.max(0, parsed.payload.vol - lastVol);
             setCandles((prev) =>
               applyTickerToCandles(
                 prev,
                 parsed.payload.last,
                 parsed.payload.timestamp,
-                bucketSecondsRef.current
+                bucketSecondsRef.current,
+                volumeDelta
               )
             );
             break;
+          }
           case "position_update":
             setPositions((prev) => {
               const idx = prev.findIndex((p) => p.id === parsed.payload.id);
