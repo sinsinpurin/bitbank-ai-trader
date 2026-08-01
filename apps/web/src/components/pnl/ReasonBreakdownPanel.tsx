@@ -10,6 +10,7 @@ const REASON_STYLE: Record<TradeReason, { label: string; color: string }> = {
   take_profit: { label: "自動利確", color: "#39FF88" },
   trailing_stop: { label: "トレーリング", color: "#FF8A1E" },
   stop_loss: { label: "自動損切り", color: "#FF8A1E" },
+  manual: { label: "手動決済", color: "#FCEE0A" },
 };
 
 const REASON_ORDER: TradeReason[] = [
@@ -18,6 +19,7 @@ const REASON_ORDER: TradeReason[] = [
   "take_profit",
   "trailing_stop",
   "stop_loss",
+  "manual",
 ];
 
 /** 決済理由(AI判断 / BOT戦略 / 自動損切り)ごとの実現損益内訳 */

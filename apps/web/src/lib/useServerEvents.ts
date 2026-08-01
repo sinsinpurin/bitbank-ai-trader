@@ -118,6 +118,22 @@ export function useServerEvents(
     };
   }, []);
 
+  // 保有中ポジションの初期取得。WSのposition_updateは「その後に変化したもの」しか
+  // 届かないため、これが無いとページ読み込み直後は既存の保有ポジションが一瞬(あるいは
+  // 次に変化が起きるまでずっと)表示されない
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_URL}/api/positions`)
+      .then((res) => (res.ok ? (res.json() as Promise<Position[]>) : []))
+      .then((data) => {
+        if (!cancelled) setPositions(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     let socket: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
