@@ -28,6 +28,8 @@ export interface CandleBucket {
   high: number;
   low: number;
   close: number;
+  /** この足の間の出来高。シード分はbitbankの実績値、形成中はtickerの24時間出来高の差分を積算した推定値 */
+  volume: number;
 }
 
 // 保持する1分足の本数(シード日数分+バッファ)
@@ -73,6 +75,20 @@ const lastFiredAt = new Map<string, number>();
 const evaluatingPairs = new Set<string>();
 // 戦略ごとに最後まで見たAI判断のupdatedAt(ai_judgmentノードの立ち上がりエッジ検出に使う)
 const lastSeenJudgmentAt = new Map<string, number>();
+// ペアごとの直近tickerの24時間出来高(vol)。次のtickとの差分を形成中足の出来高として積算する
+const lastTickerVol = new Map<string, number>();
+
+/**
+ * tickerの24時間出来高(24h累積・ローリング)から、直前tickとの差分を「この1tick分の出来高」として
+ * 推定する。24時間窓の境界をまたぐと稀に減少することがあるため、その場合は0として扱う。
+ * そのペアで初めて観測したtickは基準が無いため0を返す。
+ */
+export function tickVolumeDelta(pair: string, vol24h: number): number {
+  const last = lastTickerVol.get(pair);
+  lastTickerVol.set(pair, vol24h);
+  if (last === undefined) return 0;
+  return Math.max(0, vol24h - last);
+}
 
 interface CandlestickResponse {
   success: 0 | 1;
@@ -117,13 +133,14 @@ export async function seedCandleHistory(pair: string) {
     for (const json of responses) {
       if (!json) continue;
       for (const entry of json.data.candlestick) {
-        for (const [open, high, low, close, , ts] of entry.ohlcv) {
+        for (const [open, high, low, close, volume, ts] of entry.ohlcv) {
           candles.push({
             time: Math.floor(ts / 1000 / 60) * 60,
             open: Number(open),
             high: Number(high),
             low: Number(low),
             close: Number(close),
+            volume: Number(volume),
           });
         }
       }
@@ -167,11 +184,19 @@ function aggregateCandles(source: CandleBucket[], minutes: number): CandleBucket
     const bucketTime = Math.floor(candle.time / bucketSeconds) * bucketSeconds;
     const last = result[result.length - 1];
     if (!last || last.time !== bucketTime) {
-      result.push({ time: bucketTime, open: candle.open, high: candle.high, low: candle.low, close: candle.close });
+      result.push({
+        time: bucketTime,
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+        volume: candle.volume,
+      });
     } else {
       last.high = Math.max(last.high, candle.high);
       last.low = Math.min(last.low, candle.low);
       last.close = candle.close;
+      last.volume += candle.volume;
     }
   }
 
@@ -234,7 +259,7 @@ export async function reloadActiveStrategies() {
   console.info(`[botEngine] アクティブ戦略を再読込しました (${activeStrategies.length}件)`);
 }
 
-function recordCandle(state: PairCandleState, price: number, timestampMs: number) {
+function recordCandle(state: PairCandleState, price: number, timestampMs: number, volumeDelta: number) {
   const bucketTime = Math.floor(timestampMs / 1000 / 60) * 60;
 
   if (!state.forming || state.forming.time === bucketTime) {
@@ -243,7 +268,7 @@ function recordCandle(state: PairCandleState, price: number, timestampMs: number
       while (state.closed.length > 0 && state.closed[state.closed.length - 1].time >= bucketTime) {
         state.closed.pop();
       }
-      state.forming = { time: bucketTime, open: price, high: price, low: price, close: price };
+      state.forming = { time: bucketTime, open: price, high: price, low: price, close: price, volume: volumeDelta };
       return;
     }
     state.forming = {
@@ -251,6 +276,7 @@ function recordCandle(state: PairCandleState, price: number, timestampMs: number
       high: Math.max(state.forming.high, price),
       low: Math.min(state.forming.low, price),
       close: price,
+      volume: state.forming.volume + volumeDelta,
     };
     return;
   }
@@ -260,7 +286,7 @@ function recordCandle(state: PairCandleState, price: number, timestampMs: number
   if (state.closed.length > HISTORY_LIMIT) {
     state.closed.shift();
   }
-  state.forming = { time: bucketTime, open: price, high: price, low: price, close: price };
+  state.forming = { time: bucketTime, open: price, high: price, low: price, close: price, volume: volumeDelta };
 }
 
 function closeSeries(state: PairCandleState): number[] {
@@ -339,10 +365,10 @@ async function fireSignal(
   }
 }
 
-/** ティッカー受信ごとに呼ばれるエントリポイント */
-export async function onTick(pair: string, price: number, timestampMs: number) {
+/** ティッカー受信ごとに呼ばれるエントリポイント。vol24hはtickerの24時間出来高(累積・ローリング) */
+export async function onTick(pair: string, price: number, timestampMs: number, vol24h: number) {
   const state = stateFor(pair);
-  recordCandle(state, price, timestampMs);
+  recordCandle(state, price, timestampMs, tickVolumeDelta(pair, vol24h));
 
   const strategies = activeStrategies.filter((s) => s.pair === pair);
   if (strategies.length === 0 || evaluatingPairs.has(pair)) return;
