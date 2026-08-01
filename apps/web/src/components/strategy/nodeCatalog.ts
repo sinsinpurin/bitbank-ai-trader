@@ -64,6 +64,27 @@ export const NODE_CATALOG: NodeDef[] = [
     paramFields: [{ key: "value", label: "値", kind: "number", step: 1 }],
   },
   {
+    type: "position",
+    label: "Position",
+    category: "source",
+    description:
+      "この戦略が未決済の建玉を持っているか。エントリー条件のゲートに使う。クロス系の条件と組み合わせるのが最も安全",
+    inputs: [],
+    outputs: [{ id: "out", label: "cond", kind: "bool" }],
+    defaultParams: { state: "none" },
+    paramFields: [
+      {
+        key: "state",
+        label: "状態",
+        kind: "select",
+        options: [
+          { value: "none", label: "建玉なし" },
+          { value: "holding", label: "建玉あり" },
+        ],
+      },
+    ],
+  },
+  {
     type: "sma",
     label: "SMA",
     category: "indicator",

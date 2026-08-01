@@ -60,12 +60,17 @@ export function riskFormToInput(form: RiskFormValues, maxPositionJpy: number):
   const parse = (
     raw: string,
     label: string,
-    integer = false
+    { integer = false, allowZero = false } = {}
   ): { ok: true; value: number | null } | { ok: false; error: string } => {
+    // 空欄(null=グローバル設定)と「0」は別物として扱う。0を許すのは利確%だけで、
+    // そこでは「利確を使わない」という明示指定を意味する
     if (raw.trim() === "") return { ok: true, value: null };
     const n = Number(raw);
-    if (!Number.isFinite(n) || n <= 0 || (integer && !Number.isInteger(n))) {
-      return { ok: false, error: `${label}は正の${integer ? "整数" : "数値"}で入力してください` };
+    if (!Number.isFinite(n) || (allowZero ? n < 0 : n <= 0) || (integer && !Number.isInteger(n))) {
+      return {
+        ok: false,
+        error: `${label}は${allowZero ? "0以上" : "正"}の${integer ? "整数" : "数値"}で入力してください`,
+      };
     }
     return { ok: true, value: n };
   };
@@ -78,11 +83,11 @@ export function riskFormToInput(form: RiskFormValues, maxPositionJpy: number):
       error: `投入額は上限(¥${maxPositionJpy.toLocaleString("ja-JP")})以下で入力してください`,
     };
   }
-  const maxPos = parse(form.maxOpenPositions, "最大ポジション数", true);
+  const maxPos = parse(form.maxOpenPositions, "最大ポジション数", { integer: true });
   if (!maxPos.ok) return maxPos;
   const sl = parse(form.stopLossPct, "損切り%");
   if (!sl.ok) return sl;
-  const tp = parse(form.takeProfitPct, "利確%");
+  const tp = parse(form.takeProfitPct, "利確%", { allowZero: true });
   if (!tp.ok) return tp;
   const trail = parse(form.trailingStopPct, "トレーリング%");
   if (!trail.ok) return trail;
@@ -117,7 +122,7 @@ export function RiskSettingsPanel({
     },
     { key: "maxOpenPositions", label: "最大ポジション数", placeholder: "既定: 3 (ペア全体)" },
     { key: "stopLossPct", label: "損切り %", placeholder: "既定: 3" },
-    { key: "takeProfitPct", label: "利確 %", placeholder: "なし" },
+    { key: "takeProfitPct", label: "利確 %", placeholder: "空欄=既定5 / 0=無効" },
     { key: "trailingStopPct", label: "トレーリング %", placeholder: "なし" },
   ];
 
@@ -154,9 +159,12 @@ export function RiskSettingsPanel({
         ))}
       </SimpleGrid>
       <Text fontFamily="mono" fontSize="10px" color="text.disabled" mt={2}>
-        空欄はグローバル設定を使用。投入額は上限¥{maxPositionJpy.toLocaleString("ja-JP")}
-        (AI_MAX_POSITION_JPY)を超えて設定できません。利確・トレーリングは設定した戦略の
-        ポジションにのみ適用され、Save時にこの戦略の設定として保存されます
+        空欄はグローバル設定を使用(利確%の既定は AI_TAKE_PROFIT_PCT = 5%)。投入額は上限¥
+        {maxPositionJpy.toLocaleString("ja-JP")}
+        (AI_MAX_POSITION_JPY)を超えて設定できません。利確%は「空欄=既定5%を適用」「0=利確を無効化
+        (トレーリング/損切りのみで運用)」で意味が異なります。0以外の値は往復コスト(手数料+
+        スリッページの2回分)に対する安全マージンを下回る値を設定できません。トレーリングは設定した
+        戦略のポジションにのみ適用され、Save時にこの戦略の設定として保存されます
         (既存ポジションには影響しません)。
       </Text>
     </Box>

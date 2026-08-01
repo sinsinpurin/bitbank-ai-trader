@@ -71,6 +71,15 @@ export async function generateStrategy(
   );
 }
 
+export interface StrategyOpenPositions {
+  strategyId: string;
+  count: number;
+}
+
+export async function fetchStrategyOpenPositions(id: string): Promise<StrategyOpenPositions> {
+  return handle(await fetch(`${API_URL}/api/strategies/${id}/open-positions`));
+}
+
 export async function deleteStrategy(id: string): Promise<void> {
   await handle<{ ok: boolean }>(
     await fetch(`${API_URL}/api/strategies/${id}`, { method: "DELETE" })

@@ -135,4 +135,37 @@ export const STRATEGY_TEMPLATES: StrategyTemplate[] = [
       ],
     },
   },
+  {
+    id: "flat-only-ema-cross",
+    name: "FLAT ONLY EMA CROSS",
+    tagline: "建玉が無いときだけ買い増さない順張り",
+    flow: "Position(建玉なし) AND EMA Cross → Buy / Cross Down → Sell",
+    description:
+      "EMA(9)がEMA(21)を上抜けても、すでにこの戦略の建玉を持っている間は買わない例。Positionノードで「建玉なし」をゲート条件にすることで、同じトレンド中にポジションを積み増して平均取得単価を悪化させるのを防ぎます。下抜けで手仕舞いします。",
+    graph: {
+      nodes: [
+        { id: "fo_price", type: "price", params: {}, position: { x: 0, y: 130 } },
+        { id: "fo_fast", type: "ema", params: { period: 9 }, position: { x: 240, y: 30 } },
+        { id: "fo_slow", type: "ema", params: { period: 21 }, position: { x: 240, y: 230 } },
+        { id: "fo_flat", type: "position", params: { state: "none" }, position: { x: 240, y: 400 } },
+        { id: "fo_up", type: "cross", params: { op: "cross_above" }, position: { x: 480, y: 60 } },
+        { id: "fo_down", type: "cross", params: { op: "cross_below" }, position: { x: 480, y: 250 } },
+        { id: "fo_and", type: "logic", params: { op: "and" }, position: { x: 720, y: 120 } },
+        { id: "fo_buy", type: "buy", params: {}, position: { x: 960, y: 120 } },
+        { id: "fo_sell", type: "sell", params: {}, position: { x: 960, y: 300 } },
+      ],
+      edges: [
+        { id: "fo_e1", source: "fo_price", sourceHandle: "out", target: "fo_fast", targetHandle: "in" },
+        { id: "fo_e2", source: "fo_price", sourceHandle: "out", target: "fo_slow", targetHandle: "in" },
+        { id: "fo_e3", source: "fo_fast", sourceHandle: "out", target: "fo_up", targetHandle: "a" },
+        { id: "fo_e4", source: "fo_slow", sourceHandle: "out", target: "fo_up", targetHandle: "b" },
+        { id: "fo_e5", source: "fo_fast", sourceHandle: "out", target: "fo_down", targetHandle: "a" },
+        { id: "fo_e6", source: "fo_slow", sourceHandle: "out", target: "fo_down", targetHandle: "b" },
+        { id: "fo_e7", source: "fo_up", sourceHandle: "out", target: "fo_and", targetHandle: "a" },
+        { id: "fo_e8", source: "fo_flat", sourceHandle: "out", target: "fo_and", targetHandle: "b" },
+        { id: "fo_e9", source: "fo_and", sourceHandle: "out", target: "fo_buy", targetHandle: "condition" },
+        { id: "fo_e10", source: "fo_down", sourceHandle: "out", target: "fo_sell", targetHandle: "condition" },
+      ],
+    },
+  },
 ];

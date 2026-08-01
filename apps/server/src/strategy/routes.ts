@@ -44,13 +44,20 @@ export function validateRiskSettings(body: StrategyBody): string | null {
   const positives: [string, number | null | undefined][] = [
     ["positionSizeJpy", body.positionSizeJpy],
     ["stopLossPct", body.stopLossPct],
-    ["takeProfitPct", body.takeProfitPct],
     ["trailingStopPct", body.trailingStopPct],
   ];
   for (const [key, value] of positives) {
     if (value !== undefined && value !== null && (!Number.isFinite(value) || value <= 0)) {
       return `${key} は正の数値またはnullで指定してください`;
     }
+  }
+  // takeProfitPctだけは0を「利確を使わない(トレーリング/損切りのみで運用)」の明示指定として許容する
+  if (
+    body.takeProfitPct !== undefined &&
+    body.takeProfitPct !== null &&
+    (!Number.isFinite(body.takeProfitPct) || body.takeProfitPct < 0)
+  ) {
+    return "利確%は0以上の数値またはnullで指定してください(0は利確なしの指定)";
   }
   // 投入額の上限はAI_MAX_POSITION_JPY(config.risk.maxPositionJpy)。戦略ごとの上書きは
   // この上限を超えられない(超えて設定したい場合は環境変数側を上げる必要がある)
@@ -60,6 +67,16 @@ export function validateRiskSettings(body: StrategyBody): string | null {
     body.positionSizeJpy > config.risk.maxPositionJpy
   ) {
     return `positionSizeJpy は上限(AI_MAX_POSITION_JPY = ¥${config.risk.maxPositionJpy.toLocaleString("ja-JP")})以下で指定してください`;
+  }
+  // 往復の手数料+スリッページ分に対する安全マージンを割る利確ラインは受け付けない
+  // (0は利確なしの明示指定なので対象外)
+  if (
+    body.takeProfitPct !== undefined &&
+    body.takeProfitPct !== null &&
+    body.takeProfitPct !== 0 &&
+    body.takeProfitPct < config.fees.roundTripCostPct
+  ) {
+    return `利確%は往復コスト(手数料+スリッページ = ${config.fees.roundTripCostPct}%)に対する安全マージンを下回っています。この値以上か、利確なしを意味する0で指定してください`;
   }
   if (
     body.maxOpenPositions !== undefined &&
@@ -206,6 +223,22 @@ export async function strategyRoutes(app: FastifyInstance) {
       const dto = toStrategyDto(row);
       broadcast({ type: "strategy_update", payload: dto });
       return dto;
+    }
+  );
+
+  // Bot Blueprintの「Position」ノードのライブ値表示・エディタのライブプレビュー用
+  app.get<{ Params: { id: string } }>(
+    "/api/strategies/:id/open-positions",
+    async (request, reply) => {
+      const { id } = request.params;
+      const strategy = await prisma.strategy.findUnique({ where: { id } });
+      if (!strategy) {
+        return reply.status(404).send({ error: "指定された戦略が見つかりません" });
+      }
+      const count = await prisma.position.count({
+        where: { strategyId: id, pair: strategy.pair, side: "buy", closedAt: null },
+      });
+      return { strategyId: id, count };
     }
   );
 

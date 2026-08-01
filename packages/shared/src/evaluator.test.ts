@@ -192,6 +192,75 @@ describe("evaluateGraph / ai_judgment node", () => {
   });
 });
 
+describe("evaluateGraph / position node", () => {
+  function buildGraph(state: "none" | "holding"): StrategyGraph {
+    return {
+      nodes: [node("pos", "position", { state }), node("buy1", "buy")],
+      edges: [edge("pos", "buy1", "condition")],
+    };
+  }
+
+  it("state=none is true while flat", () => {
+    const result = evaluateGraph(buildGraph("none"), [1, 2], { hasOpenPosition: false });
+    expect(result.buy).toEqual({ current: true, previous: true });
+  });
+
+  it("state=holding is true only while a position is open", () => {
+    expect(evaluateGraph(buildGraph("holding"), [1, 2], { hasOpenPosition: true }).buy.current).toBe(true);
+    expect(evaluateGraph(buildGraph("holding"), [1, 2], { hasOpenPosition: false }).buy.current).toBe(false);
+  });
+
+  it("defaults to flat when the option is not supplied", () => {
+    expect(evaluateGraph(buildGraph("none"), [1, 2]).buy.current).toBe(true);
+    expect(evaluateGraph(buildGraph("holding"), [1, 2]).buy.current).toBe(false);
+  });
+});
+
+describe("evaluateGraph / integration: EMA cross gated by open position", () => {
+  // sma(1) crosses above sma(2) exactly at the last tick
+  const crossingCloses = [10, 10, 10, 8, 12];
+  // one tick later: still above, so the cross pulse has already passed
+  const afterCrossCloses = [10, 10, 10, 8, 12, 13];
+
+  function buildGraph(): StrategyGraph {
+    return {
+      nodes: [
+        node("price1", "price"),
+        node("fast", "sma", { period: 1 }),
+        node("slow", "sma", { period: 2 }),
+        node("crossUp", "cross", { op: "cross_above" }),
+        node("flat", "position", { state: "none" }),
+        node("buyLogic", "logic", { op: "and" }),
+        node("buy1", "buy"),
+      ],
+      edges: [
+        edge("price1", "fast", "in"),
+        edge("price1", "slow", "in"),
+        edge("fast", "crossUp", "a"),
+        edge("slow", "crossUp", "b"),
+        edge("crossUp", "buyLogic", "a"),
+        edge("flat", "buyLogic", "b"),
+        edge("buyLogic", "buy1", "condition"),
+      ],
+    };
+  }
+
+  it("buys on the cross while flat", () => {
+    const result = evaluateGraph(buildGraph(), crossingCloses, { hasOpenPosition: false });
+    expect(result.buy).toEqual({ current: true, previous: false });
+  });
+
+  it("does not buy on the same cross while already holding a position", () => {
+    const result = evaluateGraph(buildGraph(), crossingCloses, { hasOpenPosition: true });
+    expect(result.buy.current).toBe(false);
+  });
+
+  it("does not re-fire on the tick after the position was opened", () => {
+    const result = evaluateGraph(buildGraph(), afterCrossCloses, { hasOpenPosition: true });
+    expect(result.buy).toEqual({ current: false, previous: false });
+  });
+});
+
 describe("evaluateGraph / integration: EMA cross gated by AI judgment (mirrors the deployed strategy shape)", () => {
   // sma(period 1) as "fast" and sma(period 2) as "slow" cross above exactly at the last tick
   const closes = [10, 10, 10, 8, 12];

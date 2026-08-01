@@ -48,6 +48,10 @@ export function describeGraph(graph: StrategyGraph): GraphDescription {
           return "終値";
         case "constant":
           return formatValue(node.params.value);
+        case "position":
+          return String(node.params.state ?? "none") === "holding"
+            ? "建玉を保有している"
+            : "建玉を保有していない";
         case "sma":
         case "ema":
         case "rsi": {

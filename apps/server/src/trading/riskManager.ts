@@ -25,8 +25,10 @@ export function markClosingDone(positionId: string): void {
 /**
  * 保有中の全ポジションを現在値で評価し、出口条件に達していれば自動決済する。
  * 優先順: 利確(take_profit) → トレーリングストップ(trailing_stop) → 損切り(stop_loss)。
- * 損切り率はポジションに記録された戦略別設定を優先し、無ければグローバル設定を使う。
- * 利確・トレーリングはポジションに設定がある場合のみ有効。
+ * 損切り率・利確率はポジションに記録された戦略別設定を優先し、無ければグローバル設定を使う。
+ * 利確率は往復コスト(手数料+スリッページ×2)を下回らないよう切り上げる。
+ * ただし利確率が明示的に0のポジションは「利確なし」の指定として利確判定自体を行わない。
+ * トレーリングはポジションに設定がある場合のみ有効。
  * Claude APIは呼ばないためトークン課金は発生しない。
  */
 export async function checkExits(pair: string, currentPrice: number) {
@@ -47,12 +49,21 @@ export async function checkExits(pair: string, currentPrice: number) {
     }
 
     const stopLossPct = position.stopLossPct ?? config.risk.stopLossPct;
-    const takeProfitPct = position.takeProfitPct;
+    // 0は「利確を使わない(トレーリング/損切りだけで運用する)」という明示指定。
+    // 未設定(null)のときだけグローバル既定へフォールバックし、往復コストを下回る
+    // 利確ラインは安全マージンを割るため実効値をコスト分まで切り上げる
+    const takeProfitPct =
+      position.takeProfitPct === 0
+        ? null
+        : Math.max(
+            position.takeProfitPct ?? config.risk.takeProfitPct,
+            config.fees.roundTripCostPct
+          );
     const trailingStopPct = position.trailingStopPct;
 
     let reason: TradeReason | null = null;
     if (
-      takeProfitPct != null &&
+      takeProfitPct !== null &&
       currentPrice >= position.entryPrice * (1 + takeProfitPct / 100)
     ) {
       reason = "take_profit";
