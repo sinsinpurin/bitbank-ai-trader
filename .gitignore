@@ -4,6 +4,8 @@ dist/
 .next-desktop/
 out/
 apps/desktop/renderer/
+apps/desktop/server-dist/
+apps/desktop/release/
 *.db
 *.db-journal
 .env

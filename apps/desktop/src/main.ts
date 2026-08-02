@@ -13,6 +13,10 @@ import {
   registerRendererProtocolHandler,
   registerRendererProtocolPrivileges,
 } from "./rendererProtocol";
+import { getDatabaseUrl } from "./paths";
+import { ensureUserEnvFile, readUserEnv } from "./userEnv";
+import { runServerMigrations } from "./serverMigrate";
+import { initAutoUpdater } from "./updater";
 
 const WEB_PORT = Number(process.env.NOCTAS_DESKTOP_WEB_PORT ?? 3000);
 // Phase 2 で静的書き出しに切り替えた際に next dev を誤って起動しないよう、
@@ -35,7 +39,7 @@ async function stopAllProcesses(): Promise<void> {
   await Promise.allSettled([stopWebProcess(), stopServerProcess()]);
 }
 
-function createWindow(): void {
+function createWindow(): BrowserWindow {
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -69,6 +73,7 @@ function createWindow(): void {
   });
 
   void mainWindow.loadURL(RENDERER_URL);
+  return mainWindow;
 }
 
 // userData のパスは app 名から決まるため、ロック取得やready前に確定させる。
@@ -99,6 +104,9 @@ if (!app.requestSingleInstanceLock()) {
       return;
     }
 
+    // パッケージ版は apps/server/.env が無いため、ユーザーが編集する .env を userData に用意する。
+    if (app.isPackaged) ensureUserEnvFile();
+
     const decision = await guardServerPort();
     if (decision === "abort") {
       app.quit();
@@ -106,8 +114,28 @@ if (!app.requestSingleInstanceLock()) {
     }
 
     if (decision === "start-server") {
+      // パッケージ版は初回インストール時にDBが存在せず、アップデートでスキーマが
+      // 変わることもあるため、サーバー起動前に必ずマイグレーションを適用する。
+      if (app.isPackaged) {
+        try {
+          await runServerMigrations();
+        } catch (err) {
+          dialog.showErrorBox(
+            "Noctas データベースを準備できません",
+            err instanceof Error ? err.message : String(err)
+          );
+          app.quit();
+          return;
+        }
+      }
+
+      // 開発版では getDatabaseUrl() が undefined を返し、apps/server/.env の
+      // DATABASE_URL がそのまま使われる(挙動は従来どおり)。
+      const databaseUrl = getDatabaseUrl();
       try {
-        await startServerProcess();
+        await startServerProcess(
+          databaseUrl ? { ...readUserEnv(), DATABASE_URL: databaseUrl } : {}
+        );
       } catch (err) {
         dialog.showErrorBox(
           "Noctas サーバーを起動できません",
@@ -132,7 +160,7 @@ if (!app.requestSingleInstanceLock()) {
       }
     }
 
-    createWindow();
+    initAutoUpdater(createWindow(), stopAllProcesses);
   });
 
   app.on("window-all-closed", () => {

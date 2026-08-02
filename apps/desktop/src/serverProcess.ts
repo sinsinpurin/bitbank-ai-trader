@@ -1,24 +1,18 @@
 import { spawn, execFile, spawnSync, type ChildProcess } from "node:child_process";
-import path from "node:path";
+import { SERVER_DIR, SERVER_ENTRY } from "./paths";
 
 export const SERVER_PORT = Number(process.env.NOCTAS_DESKTOP_SERVER_PORT ?? 4000);
 export const HEALTH_URL = `http://127.0.0.1:${SERVER_PORT}/health`;
 
-// NOCTAS_DESKTOP_SERVER_PORT はポートのみを変える(テスト用)。DBは
-// apps/server/.env の DATABASE_URL(既定 dev.db)を引き続き使うため、
-// 別ポートで2つ目のサーバーを立てても同じDBを共有する。DBも分離したい
-// 場合は、このプロセスを起動する前に環境変数 DATABASE_URL を上書きすること
-// (下の spawn の ...process.env で自動的に子プロセスへ伝播する)。
+// NOCTAS_DESKTOP_SERVER_PORT はポートのみを変える(テスト用)。DBの場所は開発版なら
+// apps/server/.env の DATABASE_URL(既定 dev.db)、パッケージ版なら呼び出し元が
+// extraEnv で渡す userData 配下のDBになる。どちらの場合も別ポートで2つ目のサーバーを
+// 立てると同じDBを共有するので、DBも分離したい場合は DATABASE_URL を明示的に上書きすること。
 
 const READY_TIMEOUT_MS = 30_000;
 const READY_POLL_INTERVAL_MS = 100;
 const GRACEFUL_KILL_TIMEOUT_MS = 3_000;
 const STDERR_TAIL_LINES = 40;
-
-// dist/main.js から見て apps/desktop/dist -> リポジトリルート
-const repoRoot = path.resolve(__dirname, "..", "..", "..");
-const serverDir = path.join(repoRoot, "apps", "server");
-const serverEntry = path.join(serverDir, "dist", "index.js");
 
 let child: ChildProcess | null = null;
 const stderrTail: string[] = [];
@@ -48,16 +42,24 @@ export function isServerManaged(): boolean {
   return child !== null;
 }
 
-export async function startServerProcess(): Promise<void> {
+export async function startServerProcess(extraEnv: Record<string, string> = {}): Promise<void> {
   if (child) return;
 
   stderrTail.length = 0;
 
   // shell: true は使わない。Windowsで cmd.exe が中間に挟まると、
   // 親をkillしてもnode本体が孤児として:4000を掴んだまま残る。
-  const proc = spawn(process.execPath, [serverEntry], {
-    cwd: serverDir,
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", PORT: String(SERVER_PORT) },
+  const proc = spawn(process.execPath, [SERVER_ENTRY], {
+    cwd: SERVER_DIR,
+    // ELECTRON_RUN_AS_NODE と PORT は最後に置いて必ず勝たせる。ユーザーが .env で
+    // 上書きすると、サーバーがElectronとして起動したり、レンダラーの参照先と
+    // ポートがずれて画面から繋がらなくなる。
+    env: {
+      ...process.env,
+      ...extraEnv,
+      ELECTRON_RUN_AS_NODE: "1",
+      PORT: String(SERVER_PORT),
+    },
     windowsHide: true,
     stdio: ["ignore", "pipe", "pipe"],
   });

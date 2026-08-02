@@ -284,6 +284,39 @@ export default function DocsPage() {
                     <>初回は <Mono>apps/server/.env</Mono> に <Mono>ANTHROPIC_API_KEY</Mono> を設定(AI機能に必要)</>,
                   ]}
                 />
+                <SubHeading>デスクトップ版(Windows)</SubHeading>
+                <P>
+                  インストーラー版はサーバーを内蔵しているため、ターミナルもブラウザも不要です。
+                  設定とデータは、アップデートで入れ替わらないユーザーフォルダに保存されます。
+                </P>
+                <DefTable
+                  rows={[
+                    {
+                      term: "APIキーの設定",
+                      def: (
+                        <>
+                          <Mono>%APPDATA%\Noctas\.env</Mono> をテキストエディタで開き、
+                          <Mono>ANTHROPIC_API_KEY=</Mono> の行のコメント(先頭の#)を外して値を書きます。
+                          このファイルは初回起動時に作られ、アップデートで上書きされません。編集後はNoctasを再起動してください。
+                        </>
+                      ),
+                    },
+                    {
+                      term: "データの保存先",
+                      def: (
+                        <>
+                          <Mono>%APPDATA%\Noctas\noctas.db</Mono>(仮想残高・ポジション・約定履歴・戦略)。
+                          アップデート時にスキーマ変更があれば起動時に自動で適用されるため、履歴は引き継がれます。
+                          <Mono>DATABASE_URL</Mono> を .env に書いても無視されます。
+                        </>
+                      ),
+                    },
+                    {
+                      term: "アップデート",
+                      def: "新しいバージョンがあると自動でダウンロードし、再起動するかどうかをダイアログで尋ねます。勝手に再起動することはないので、建玉を持ったまま更新が適用されることはありません。",
+                    },
+                  ]}
+                />
                 <SubHeading>2つの取引系統</SubHeading>
                 <DefTable
                   rows={[
