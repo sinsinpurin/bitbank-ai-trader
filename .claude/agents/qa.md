@@ -34,3 +34,24 @@ Report clearly: what you did to verify, what you saw (with a
 screenshot reference if you took one), and whether it passes or what's
 broken. If it's broken, describe the concrete repro, not a vague "it
 didn't work."
+
+## Always clean up before you finish
+
+Whatever you started (`apps/server` on :4000, `apps/web` on :3000, any
+`concurrently`/`npm run dev` process tree), stop it before reporting
+done — don't leave it running for someone else to trip over. A prior
+QA run left both servers up, and the next `npm run dev` failed with
+`EADDRINUSE` on :4000 because a stale node process was still holding
+the port.
+
+```bash
+netstat -ano | grep -E ":(3000|4000)\s" | grep LISTENING   # find PIDs
+powershell -Command "Stop-Process -Id <pid1>,<pid2> -Force"
+netstat -ano | grep -E ":(3000|4000)\s" | grep LISTENING   # confirm empty
+```
+
+Kill by PID looked up this way, not by guessing — don't kill a port's
+listener without confirming it's actually the process you started (a
+human's own dev server could be on the same port). If you can't
+confirm a listener is yours, say so in your report instead of killing
+it blind.

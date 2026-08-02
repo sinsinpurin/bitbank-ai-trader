@@ -3,6 +3,7 @@ dist/
 .next/
 .next-desktop/
 out/
+apps/desktop/renderer/
 *.db
 *.db-journal
 .env
