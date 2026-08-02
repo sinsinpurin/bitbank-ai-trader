@@ -7,12 +7,21 @@ import {
   forceKillServerProcessSync,
 } from "./serverProcess";
 import { startWebProcess, stopWebProcess, forceKillWebProcessSync } from "./webProcess";
+import {
+  APP_RENDERER_URL,
+  hasRendererBuild,
+  registerRendererProtocolHandler,
+  registerRendererProtocolPrivileges,
+} from "./rendererProtocol";
 
 const WEB_PORT = Number(process.env.NOCTAS_DESKTOP_WEB_PORT ?? 3000);
-const RENDERER_URL = process.env.NOCTAS_DESKTOP_RENDERER ?? `http://localhost:${WEB_PORT}`;
 // Phase 2 で静的書き出しに切り替えた際に next dev を誤って起動しないよう、
 // 明示的にオプトインした開発時 (npm run dev:desktop) だけ web を管理する。
 const MANAGE_WEB = process.env.NOCTAS_DESKTOP_MANAGE_WEB === "1";
+// web を管理しない = 静的書き出し済みの renderer を app:// から配信する。
+const RENDERER_URL =
+  process.env.NOCTAS_DESKTOP_RENDERER ??
+  (MANAGE_WEB ? `http://localhost:${WEB_PORT}` : APP_RENDERER_URL);
 
 let mainWindow: BrowserWindow | null = null;
 let quitting = false;
@@ -47,8 +56,9 @@ function createWindow(): void {
   });
 
   // web開発サーバーの listen 直後はまだ接続を取りこぼすことがあるため、一度だけ再試行する。
+  // app:// 配信時はロード失敗が資産欠損を意味するので、握りつぶさずそのまま表示させる。
   mainWindow.webContents.on("did-fail-load", (_event, _code, _desc, _url, isMainFrame) => {
-    if (!isMainFrame || loadRetried || quitting) return;
+    if (!MANAGE_WEB || !isMainFrame || loadRetried || quitting) return;
     loadRetried = true;
     setTimeout(() => {
       void mainWindow?.loadURL(RENDERER_URL);
@@ -57,6 +67,11 @@ function createWindow(): void {
 
   void mainWindow.loadURL(RENDERER_URL);
 }
+
+// userData のパスは app 名から決まるため、ロック取得やready前に確定させる。
+app.setName("Noctas");
+// registerSchemesAsPrivileged は app.whenReady() より前に呼ぶ必要がある。
+registerRendererProtocolPrivileges();
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -68,6 +83,19 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(async () => {
+    registerRendererProtocolHandler();
+
+    // サーバー/portGuardより前に確認する: レンダラーが無いなら、
+    // バックエンドを起動する意味がないので早期に諦める。
+    if (!MANAGE_WEB && !hasRendererBuild()) {
+      dialog.showErrorBox(
+        "Noctas レンダラーが見つかりません",
+        "apps/desktop/renderer が存在しません。`npm run build:desktop:renderer` を実行してビルドしてください。"
+      );
+      app.quit();
+      return;
+    }
+
     const decision = await guardServerPort();
     if (decision === "abort") {
       app.quit();
