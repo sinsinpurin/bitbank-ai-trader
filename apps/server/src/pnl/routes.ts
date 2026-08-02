@@ -1,17 +1,18 @@
 import type { FastifyInstance } from "fastify";
-import { config } from "../config";
 import { getPnlSummary } from "./summary";
 import { generateTradeReview } from "../ai/reviewGenerator";
+import { getAnthropicApiKey } from "../ai/anthropicClient";
 
 export async function pnlRoutes(app: FastifyInstance) {
   app.get("/api/pnl", async () => getPnlSummary());
 
   // 過去の取引実績をAIにレビューさせる(ユーザー操作起点の単発呼び出し)
   app.post("/api/pnl/review", async (request, reply) => {
-    if (!config.anthropic.apiKey) {
-      return reply
-        .status(503)
-        .send({ error: "ANTHROPIC_API_KEY が設定されていないため、レビューは利用できません" });
+    if (!getAnthropicApiKey()) {
+      return reply.status(503).send({
+        error:
+          "Anthropic APIキーが設定されていないため、レビューは利用できません。Settings画面から設定してください",
+      });
     }
 
     const summary = await getPnlSummary();

@@ -6,6 +6,7 @@ import type { SettingsResponse } from "@noctas/shared";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { CyberPanel } from "@/components/ui/CyberPanel";
 import { AiJudgmentControlPanel } from "@/components/settings/AiJudgmentControlPanel";
+import { AnthropicApiKeyPanel } from "@/components/settings/AnthropicApiKeyPanel";
 import { CircuitBreakerPanel } from "@/components/settings/CircuitBreakerPanel";
 import { PaperTradingResetPanel } from "@/components/settings/PaperTradingResetPanel";
 import { UsageSummaryTiles } from "@/components/settings/UsageSummaryTiles";
@@ -34,7 +35,8 @@ export default function SettingsPage() {
     return () => clearInterval(timer);
   }, [refresh]);
 
-  const handleUpdate = useCallback(async (input: UpdateSettingsInput) => {
+  /** 保存できたらtrue。呼び出し側が失敗を検知して入力内容を保持できるようにする */
+  const handleUpdate = useCallback(async (input: UpdateSettingsInput): Promise<boolean> => {
     setSaving(true);
     try {
       const result = await updateSettings(input);
@@ -42,8 +44,10 @@ export default function SettingsPage() {
         prev ? { ...prev, settings: result.settings, circuitBreaker: result.circuitBreaker } : prev
       );
       setError(null);
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "設定の更新に失敗しました");
+      return false;
     } finally {
       setSaving(false);
     }
@@ -64,8 +68,18 @@ export default function SettingsPage() {
 
         {data && (
           <Grid templateColumns={{ base: "1fr", xl: "1fr 2fr" }} gap={6}>
+            <GridItem colSpan={{ base: 1, xl: 2 }}>
+              <CyberPanel title="Anthropic API Key" code="01 / KEY" accent="cyan" delay={0}>
+                <AnthropicApiKeyPanel
+                  settings={data.settings}
+                  saving={saving}
+                  onUpdate={handleUpdate}
+                />
+              </CyberPanel>
+            </GridItem>
+
             <GridItem>
-              <CyberPanel title="AI Judgment" code="01 / CTRL" accent="red" delay={0}>
+              <CyberPanel title="AI Judgment" code="02 / CTRL" accent="red" delay={0.05}>
                 <AiJudgmentControlPanel
                   enabled={data.settings.aiJudgmentEnabled}
                   usage={data.usage}
@@ -76,7 +90,7 @@ export default function SettingsPage() {
             </GridItem>
 
             <GridItem>
-              <CyberPanel title="Circuit Breaker / 安全装置" code="02 / SAFE" accent="red" delay={0.05}>
+              <CyberPanel title="Circuit Breaker / 安全装置" code="03 / SAFE" accent="red" delay={0.1}>
                 <CircuitBreakerPanel
                   settings={data.settings}
                   status={data.circuitBreaker}
@@ -87,19 +101,19 @@ export default function SettingsPage() {
             </GridItem>
 
             <GridItem colSpan={{ base: 1, xl: 2 }}>
-              <CyberPanel title="AI Usage / 使用量サマリ" code="03 / COST" accent="cyan" delay={0.1}>
+              <CyberPanel title="AI Usage / 使用量サマリ" code="04 / COST" accent="cyan" delay={0.15}>
                 <UsageSummaryTiles usage={data.usage} />
               </CyberPanel>
             </GridItem>
 
             <GridItem colSpan={{ base: 1, xl: 2 }}>
-              <CyberPanel title="Daily Usage / 日別使用量 (JST)" code="04 / LOG" accent="cyan" delay={0.15}>
+              <CyberPanel title="Daily Usage / 日別使用量 (JST)" code="05 / LOG" accent="cyan" delay={0.2}>
                 <UsageDailyTable days={data.usage.days} />
               </CyberPanel>
             </GridItem>
 
             <GridItem colSpan={{ base: 1, xl: 2 }}>
-              <CyberPanel title="Paper Trading Reset / データ初期化" code="05 / RESET" accent="red" delay={0.2}>
+              <CyberPanel title="Paper Trading Reset / データ初期化" code="06 / RESET" accent="red" delay={0.25}>
                 <PaperTradingResetPanel tradingMode={data.tradingMode} />
               </CyberPanel>
             </GridItem>

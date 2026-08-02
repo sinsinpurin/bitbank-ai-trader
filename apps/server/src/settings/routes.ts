@@ -10,6 +10,13 @@ import { config } from "../config";
 import { estimateCostJpy } from "../ai/pricing";
 import { isAiJudgmentEnabled, setAiJudgmentEnabled } from "../ai/aiJudgment";
 import {
+  clearAnthropicApiKey,
+  getAnthropicApiKeyStatus,
+  loadAnthropicApiKey,
+  normalizeApiKey,
+  setAnthropicApiKey,
+} from "../ai/anthropicClient";
+import {
   getCircuitBreakerSettings,
   getCircuitBreakerStatus,
   resumeTrading,
@@ -39,6 +46,7 @@ async function loadPersistedSettings() {
   if (row) {
     setAiJudgmentEnabled(row.value === "true");
   }
+  await loadAnthropicApiKey();
 }
 
 async function buildUsageSummary(): Promise<AiUsageSummary> {
@@ -120,11 +128,15 @@ async function buildUsageSummary(): Promise<AiUsageSummary> {
 
 function currentSettings(): AppSettings {
   const breaker = getCircuitBreakerSettings();
+  const apiKey = getAnthropicApiKeyStatus();
   return {
     aiJudgmentEnabled: isAiJudgmentEnabled(),
     circuitBreakerEnabled: breaker.enabled,
     dailyMaxLossJpy: breaker.dailyMaxLossJpy,
     maxConsecutiveLosses: breaker.maxConsecutiveLosses,
+    anthropicApiKeyConfigured: apiKey.configured,
+    anthropicApiKeySource: apiKey.source,
+    anthropicApiKeyMasked: apiKey.masked,
   };
 }
 
@@ -148,6 +160,8 @@ export async function settingsRoutes(app: FastifyInstance) {
       maxConsecutiveLosses?: number;
       /** trueで当日のサーキットブレーカー停止を手動解除する */
       resumeTrading?: boolean;
+      /** APIキーの新しい値。nullで保存済みキーを削除し、環境変数へのフォールバックに戻す */
+      anthropicApiKey?: string | null;
     };
   }>("/api/settings", async (request, reply) => {
     const body = request.body ?? {};
@@ -157,9 +171,27 @@ export async function settingsRoutes(app: FastifyInstance) {
       body.circuitBreakerEnabled === undefined &&
       body.dailyMaxLossJpy === undefined &&
       body.maxConsecutiveLosses === undefined &&
-      body.resumeTrading === undefined
+      body.resumeTrading === undefined &&
+      body.anthropicApiKey === undefined
     ) {
       return reply.status(400).send({ error: "更新する設定を1つ以上指定してください" });
+    }
+
+    // APIキーは検証だけ先に済ませ、永続化は他フィールドの検証を全て通過してから行う。
+    // 先に保存してしまうと、別フィールドが原因の400を返しつつキーだけ反映済みになる
+    let apiKeyUpdate: { normalized: string | null } | null = null;
+    if (body.anthropicApiKey !== undefined) {
+      if (body.anthropicApiKey !== null && typeof body.anthropicApiKey !== "string") {
+        return reply
+          .status(400)
+          .send({ error: "anthropicApiKey は文字列またはnullで指定してください" });
+      }
+      const normalized =
+        body.anthropicApiKey === null ? null : normalizeApiKey(body.anthropicApiKey);
+      if (body.anthropicApiKey !== null && normalized === null) {
+        return reply.status(400).send({ error: "APIキーの形式が正しくありません" });
+      }
+      apiKeyUpdate = { normalized };
     }
 
     try {
@@ -188,6 +220,19 @@ export async function settingsRoutes(app: FastifyInstance) {
       return reply
         .status(400)
         .send({ error: err instanceof Error ? err.message : "設定の更新に失敗しました" });
+    }
+
+    if (apiKeyUpdate) {
+      // キーの生値がエラーメッセージ経由で外へ出ないよう、下位のエラーは一切転送せず固定文言を返す
+      try {
+        if (apiKeyUpdate.normalized === null) {
+          await clearAnthropicApiKey();
+        } else {
+          await setAnthropicApiKey(apiKeyUpdate.normalized);
+        }
+      } catch {
+        return reply.status(500).send({ error: "APIキーの保存に失敗しました" });
+      }
     }
 
     return { settings: currentSettings(), circuitBreaker: getCircuitBreakerStatus() };

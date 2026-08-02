@@ -1,4 +1,5 @@
 import { getAiDecision, type MarketSnapshot } from "./claudeService";
+import { getAnthropicApiKey } from "./anthropicClient";
 import { prisma } from "../db/prisma";
 import { broadcast } from "../ws/relay";
 import { config } from "../config";
@@ -163,6 +164,9 @@ export function startAiJudgmentLoop() {
 
       if (!enabled) return;
       if (usage.budgetExceeded) return;
+      // キー未設定のまま呼び出すと毎tick例外になるだけなので、静かに待つ。
+      // Settings画面から保存されれば次のtickでそのまま再開する(再起動不要)
+      if (!getAnthropicApiKey()) return;
 
       const now = Date.now();
       for (const pair of watchedPairs) {

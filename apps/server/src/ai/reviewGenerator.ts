@@ -3,8 +3,7 @@ import type { PnlReview, PnlSummary } from "@noctas/shared";
 import { config } from "../config";
 import { prisma } from "../db/prisma";
 import { estimateCostJpy } from "./pricing";
-
-const anthropic = new Anthropic({ apiKey: config.anthropic.apiKey });
+import { getAnthropicClient } from "./anthropicClient";
 
 // レビューは自由文の一回応答なので、戦略生成(tool_use)ほどのトークン数は不要
 const REVIEW_MAX_TOKENS = 1024;
@@ -79,7 +78,7 @@ ${formatPositions(summary) || "(データなし)"}`;
 export async function generateTradeReview(summary: PnlSummary): Promise<PnlReview> {
   const model = config.ai.strategyModel;
   const userPrompt = buildUserPrompt(summary);
-  const message = await anthropic.messages.create({
+  const message = await getAnthropicClient().messages.create({
     model,
     max_tokens: REVIEW_MAX_TOKENS,
     system: SYSTEM_PROMPT,

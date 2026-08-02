@@ -5,6 +5,7 @@ import { prisma } from "../db/prisma";
 import { reloadActiveStrategies } from "./botEngine";
 import { broadcast } from "../ws/relay";
 import { generateStrategyFromPrompt } from "../ai/strategyGenerator";
+import { getAnthropicApiKey } from "../ai/anthropicClient";
 import { config } from "../config";
 
 function toStrategyDto(row: PrismaStrategy): Strategy {
@@ -140,10 +141,11 @@ export async function strategyRoutes(app: FastifyInstance) {
           .status(400)
           .send({ error: `reviewContext は${MAX_REVIEW_CONTEXT_LENGTH}文字以内で指定してください` });
       }
-      if (!config.anthropic.apiKey) {
-        return reply
-          .status(503)
-          .send({ error: "ANTHROPIC_API_KEY が設定されていないため、AI生成は利用できません" });
+      if (!getAnthropicApiKey()) {
+        return reply.status(503).send({
+          error:
+            "Anthropic APIキーが設定されていないため、AI生成は利用できません。Settings画面から設定してください",
+        });
       }
 
       try {

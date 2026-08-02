@@ -25,6 +25,8 @@ export interface UpdateSettingsInput {
   maxConsecutiveLosses?: number;
   /** trueで当日のサーキットブレーカー停止を手動解除する */
   resumeTrading?: boolean;
+  /** Anthropic APIキーの新しい値。nullで保存済みキーを削除する(環境変数へのフォールバックに戻る) */
+  anthropicApiKey?: string | null;
 }
 
 export async function updateSettings(
