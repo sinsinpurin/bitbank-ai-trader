@@ -1,3 +1,5 @@
+<img src="assets/noctas-brand-assets/noctas-icon-transparent-256.png" width="96" height="96" alt="Noctas logo" />
+
 # Noctas
 
 Claude(Anthropic API)による売買判断をペーパートレードで検証する、cyberpunk風UIのAIトレーディングダッシュボード。
