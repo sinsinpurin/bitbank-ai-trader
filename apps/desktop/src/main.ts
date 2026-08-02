@@ -22,6 +22,9 @@ const MANAGE_WEB = process.env.NOCTAS_DESKTOP_MANAGE_WEB === "1";
 const RENDERER_URL =
   process.env.NOCTAS_DESKTOP_RENDERER ??
   (MANAGE_WEB ? `http://localhost:${WEB_PORT}` : APP_RENDERER_URL);
+// NOCTAS_DESKTOP_RENDERERで上書きされている場合、MANAGE_WEBの値に関わらず
+// 実際に app:// を読み込むかどうかはこちらで判定する。
+const USES_APP_PROTOCOL = RENDERER_URL === APP_RENDERER_URL;
 
 let mainWindow: BrowserWindow | null = null;
 let quitting = false;
@@ -58,7 +61,7 @@ function createWindow(): void {
   // web開発サーバーの listen 直後はまだ接続を取りこぼすことがあるため、一度だけ再試行する。
   // app:// 配信時はロード失敗が資産欠損を意味するので、握りつぶさずそのまま表示させる。
   mainWindow.webContents.on("did-fail-load", (_event, _code, _desc, _url, isMainFrame) => {
-    if (!MANAGE_WEB || !isMainFrame || loadRetried || quitting) return;
+    if (USES_APP_PROTOCOL || !isMainFrame || loadRetried || quitting) return;
     loadRetried = true;
     setTimeout(() => {
       void mainWindow?.loadURL(RENDERER_URL);
@@ -87,7 +90,7 @@ if (!app.requestSingleInstanceLock()) {
 
     // サーバー/portGuardより前に確認する: レンダラーが無いなら、
     // バックエンドを起動する意味がないので早期に諦める。
-    if (!MANAGE_WEB && !hasRendererBuild()) {
+    if (USES_APP_PROTOCOL && !hasRendererBuild()) {
       dialog.showErrorBox(
         "Noctas レンダラーが見つかりません",
         "apps/desktop/renderer が存在しません。`npm run build:desktop:renderer` を実行してビルドしてください。"
