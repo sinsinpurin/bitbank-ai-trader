@@ -2,15 +2,24 @@
   "name": "@noctas/desktop",
   "version": "0.1.0",
   "private": true,
+  "description": "Noctas paper-trading desktop app",
+  "author": "sinsinpurin",
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "npm run build && electron .",
-    "start": "electron ."
+    "start": "electron .",
+    "dist": "electron-builder --win --publish never",
+    "release": "electron-builder --win --publish always"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "electron-updater": "^6"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
-    "electron": "^43.2.0",
+    "electron": "43.2.0",
+    "electron-builder": "^26",
     "typescript": "^5.6.3"
   }
 }

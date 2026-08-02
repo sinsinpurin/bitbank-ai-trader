@@ -77,6 +77,46 @@ npm run start:server
 npm run start:web
 ```
 
+## デスクトップアプリ(Windows)
+
+Electron版。`apps/web`を静的書き出ししたレンダラーを`app://`から配信し、`apps/server`を
+同梱してアプリ内で起動する。ブラウザもターミナルも開かずに使える。
+
+```bash
+npm run dev:desktop     # 開発用(next dev + apps/server をそのまま使う。DBは apps/server/.env のまま)
+npm run dist:desktop    # インストーラーをローカルでビルド(GitHubには何も送らない)
+```
+
+`npm run dist:desktop`の成果物は`apps/desktop/release/Noctas Setup <version>.exe`。
+
+### リリース手順
+
+CIはバージョンを書き換えない。タグとpackage.jsonの不一致は検知して失敗する。
+
+1. `apps/desktop/package.json`の`version`を上げてコミット・push
+2. `git tag vX.Y.Z && git push --tags`
+   (electron-builderがReleaseに付けるタグと同じ形式にすること。ずれると、
+   下書きを公開した時点のmaster HEADにタグが作られ、実際にビルドしたコミットと食い違う)
+3. `.github/workflows/desktop-release.yml`がWindowsでビルドし、**下書きの**GitHub Releaseを作成する
+4. 内容を確認して、GitHub上で手動でReleaseを公開する
+
+公開するまで、インストール済みクライアントの自動アップデートには一切見えない。
+更新が見つかるとバックグラウンドでダウンロードされ、再起動するかどうかをダイアログで尋ねる
+(終了時に黙って入れ替わることはない)。
+
+### ユーザーデータの場所
+
+インストール先はアップデートで入れ替わるため、データは`%APPDATA%\Noctas\`に置かれる。
+
+- `%APPDATA%\Noctas\noctas.db` — SQLiteデータベース(起動時に`prisma migrate deploy`で自動更新)
+- `%APPDATA%\Noctas\.env` — `ANTHROPIC_API_KEY`などの設定。初回起動時に作られ、アップデートで上書きされない
+  (`DATABASE_URL`をここに書いても無視される。DBの場所はアプリが管理する)
+
+### 署名について
+
+インストーラーはコード署名していないため、初回実行時にWindows SmartScreenの警告が出る。
+「詳細情報」→「実行」で進められる。仕様であってバグではない。
+
 ## テスト
 
 [Vitest](https://vitest.dev/)によるユニットテスト。`packages/shared`(戦略グラフの評価器・テクニカル指標)、

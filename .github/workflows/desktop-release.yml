@@ -1,0 +1,35 @@
+name: Desktop Release
+
+# electron-builder のGitHub publisherは、ワークフローを起動したタグではなく
+# 常に "v<version>" でReleaseにタグを付ける。トリガーのタグ形式を合わせておかないと、
+# 下書きを公開した時点のmaster HEADに v<version> が作られ、実際にビルドされた
+# コミットとReleaseのタグがずれる。
+#
+# workflow_dispatch は用意しない。タグ無しで --publish always を実行すると、
+# 対応するタグが存在しない下書きReleaseができてしまい、同じズレを招く。
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # Electron 43 が同梱する Node に合わせる (同梱サーバーは
+          # ELECTRON_RUN_AS_NODE でこのランタイム上で動く)。
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run prisma:generate --workspace=apps/server
+      - run: node apps/desktop/scripts/check-release-version.mjs
+      # electron-builder は publish: github / releaseType: draft の設定に従い、
+      # 下書きのGitHub Releaseへアップロードする。公開は人間が手動で行う。
+      - run: npm run release:desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

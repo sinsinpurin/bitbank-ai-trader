@@ -1,0 +1,44 @@
+appId: com.sinsinpurin.noctas
+productName: Noctas
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**/*
+  - renderer/**/*
+  - resources/**/*
+  - package.json
+# server-dist をまとめて1エントリでコピーすると、electron-builder が
+# コピー元直下の "node_modules" を無条件に除外する (app-builder-lib の
+# util/filter.js を参照) ため、同梱サーバーが依存を解決できなくなる。
+# node_modules がコピー元のルートになるようエントリを分けて回避する。
+extraResources:
+  - from: server-dist/dist
+    to: server/dist
+  - from: server-dist/node_modules
+    to: server/node_modules
+  - from: server-dist/prisma
+    to: server/prisma
+  - from: server-dist/prisma-cli
+    to: server/prisma-cli
+  - from: server-dist/package.json
+    to: server/package.json
+win:
+  target: nsis
+  icon: build/icon.ico
+nsis:
+  # oneClick=false + allowToChangeInstallationDirectory=true でインストール先を選べるようにする。
+  oneClick: false
+  # perMachine=false は意図的。%LOCALAPPDATA% へのインストールなら昇格不要で、
+  # 自動アップデートのたびにUACが出ることがない。
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+publish:
+  # owner/repo はリテラル固定。git remote から推測させると、フォークやミラーから
+  # ビルドしたバイナリが別のリリースフィードを見に行ってしまう。
+  provider: github
+  owner: sinsinpurin
+  repo: noctas
+  # draft のまま。人間がGitHub Releaseを公開するまで、配布済みクライアントの
+  # 自動アップデートには一切見えない。
+  releaseType: draft
