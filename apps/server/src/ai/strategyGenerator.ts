@@ -10,8 +10,7 @@ import {
 import { config } from "../config";
 import { prisma } from "../db/prisma";
 import { estimateCostJpy } from "./pricing";
-
-const anthropic = new Anthropic({ apiKey: config.anthropic.apiKey });
+import { getAnthropicClient } from "./anthropicClient";
 
 /** ノード種別ごとのポート仕様(webのnodeCatalogと同一内容のサーバー側定義) */
 const NODE_SPEC: Record<
@@ -309,7 +308,7 @@ export async function generateStrategyFromPrompt(
   let lastErrors: string[] = [];
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const message = await anthropic.messages.create({
+    const message = await getAnthropicClient().messages.create({
       model,
       max_tokens: config.ai.strategyMaxTokens,
       system: systemPrompt,

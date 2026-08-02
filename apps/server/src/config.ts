@@ -63,6 +63,8 @@ export const config = {
     apiSecret: process.env.BITBANK_API_SECRET ?? "",
   },
   anthropic: {
+    // これは環境変数フォールバックのみ。実効キーはSettings画面で保存されたDB値が優先されるため、
+    // 呼び出し側はここではなく ai/anthropicClient.ts の getAnthropicApiKey() を使うこと
     apiKey: requireEnv("ANTHROPIC_API_KEY", ""),
   },
   ai: {

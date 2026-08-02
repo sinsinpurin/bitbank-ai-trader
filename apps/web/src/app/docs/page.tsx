@@ -281,7 +281,7 @@ export default function DocsPage() {
                   items={[
                     <>ターミナル1: <Mono>npm run dev:server</Mono>(APIサーバー、port 4000)</>,
                     <>ターミナル2: <Mono>npm run dev:web</Mono>(この画面、port 3000)</>,
-                    <>初回は <Mono>apps/server/.env</Mono> に <Mono>ANTHROPIC_API_KEY</Mono> を設定(AI機能に必要)</>,
+                    <>初回はSettings画面の「Anthropic API Key」でAPIキーを設定(AI機能に必要。<Mono>apps/server/.env</Mono> の <Mono>ANTHROPIC_API_KEY</Mono> でも可)</>,
                   ]}
                 />
                 <SubHeading>デスクトップ版(Windows)</SubHeading>
@@ -295,9 +295,11 @@ export default function DocsPage() {
                       term: "APIキーの設定",
                       def: (
                         <>
-                          <Mono>%APPDATA%\Noctas\.env</Mono> をテキストエディタで開き、
-                          <Mono>ANTHROPIC_API_KEY=</Mono> の行のコメント(先頭の#)を外して値を書きます。
-                          このファイルは初回起動時に作られ、アップデートで上書きされません。編集後はNoctasを再起動してください。
+                          Settings画面の「Anthropic API Key」から設定できます。保存すると即座に反映されるため、再起動は不要です。
+                          キーはこの端末のローカルDBに保存され、画面には末尾4文字のみ表示されます。
+                          上級者・開発者向けの代替手段として <Mono>%APPDATA%\Noctas\.env</Mono> の
+                          <Mono>ANTHROPIC_API_KEY=</Mono> も引き続き使えます(この場合は編集後に再起動が必要)。
+                          画面で保存したキーがある場合は、そちらが優先されます。
                         </>
                       ),
                     },
@@ -576,7 +578,7 @@ export default function DocsPage() {
                   rows={[
                     { term: "TARGET_PAIRS", def: "取引対象ペア(カンマ区切り)。例: btc_jpy,eth_jpy。先頭がメインペア。既定: btc_jpy" },
                     { term: "TRADING_MODE", def: "取引モード。現状は paper のみ対応(実運用注文APIは呼び出さない)。Settingsのペーパートレードリセットは paper のときのみ実行できる。既定: paper" },
-                    { term: "ANTHROPIC_API_KEY", def: "Claude APIキー。AI売買判断・AI戦略生成に必要。" },
+                    { term: "ANTHROPIC_API_KEY", def: "Claude APIキー。AI売買判断・AI戦略生成・AIレビューに必要。Settings画面から設定した場合はそちらが優先され、この環境変数はフォールバックとして使われる。" },
                     { term: "AI_MODEL", def: "売買判断用モデル。既定: claude-haiku-4-5(高頻度呼び出しのため低コストモデル)" },
                     { term: "AI_STRATEGY_MODEL", def: "戦略生成用モデル。既定: claude-opus-4-8(単発・高品質重視)" },
                     { term: "AI_DAILY_BUDGET_JPY", def: "AI判断(AI Judgmentノード)の日次コスト上限(円)。超過した日は呼び出し停止。既定: 100" },

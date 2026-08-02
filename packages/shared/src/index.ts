@@ -250,6 +250,12 @@ export interface AppSettings {
   dailyMaxLossJpy: number;
   /** 戦略がこの回数連続で負けたら自動でStandbyにする */
   maxConsecutiveLosses: number;
+  /** Anthropic APIキーが設定済みか(DBまたは環境変数) */
+  anthropicApiKeyConfigured: boolean;
+  /** 有効なキーの取得元。未設定ならnull */
+  anthropicApiKeySource: "db" | "env" | null;
+  /** 末尾4文字のみのマスク表示(例 "••••••••ab12")。生値は絶対に返さない */
+  anthropicApiKeyMasked: string | null;
 }
 
 /** サーキットブレーカーの発動状態 */

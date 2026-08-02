@@ -1,8 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { AiAction } from "@noctas/shared";
 import { config } from "../config";
-
-const anthropic = new Anthropic({ apiKey: config.anthropic.apiKey });
+import { getAnthropicClient } from "./anthropicClient";
 
 export interface MarketSnapshot {
   pair: string;
@@ -55,7 +54,7 @@ const DECISION_TOOL = {
 export async function getAiDecision(
   snapshot: MarketSnapshot
 ): Promise<AiDecisionResult> {
-  const message = await anthropic.messages.create({
+  const message = await getAnthropicClient().messages.create({
     model: config.ai.model,
     max_tokens: config.ai.maxTokens,
     tools: [DECISION_TOOL],
