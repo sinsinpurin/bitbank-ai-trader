@@ -198,8 +198,10 @@ export interface StrategyRiskSettings {
 export interface Strategy extends StrategyRiskSettings {
   id: string;
   name: string;
-  /** 対象ペア(例: "btc_jpy")。このペアの1分足でグラフが評価される */
+  /** 対象ペア(例: "btc_jpy")。このペア・時間足の組み合わせでグラフが評価される */
   pair: Pair;
+  /** グラフを評価する時間足 */
+  timeframe: CandleTimeframe;
   description: string;
   graph: StrategyGraph;
   isActive: boolean;

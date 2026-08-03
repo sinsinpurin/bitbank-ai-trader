@@ -7,7 +7,9 @@ import { isBuyHalted } from "../trading/circuitBreaker";
 import { toPositionEvent, toTradeEvent } from "../trading/mappers";
 import { getJudgment, setWatchedPairs } from "../ai/aiJudgment";
 import {
+  DEFAULT_CANDLE_TIMEFRAME,
   evaluateGraph,
+  isCandleTimeframe,
   minutesOfTimeframe,
   parseGraph,
   type BotSignal,
@@ -18,7 +20,8 @@ import {
 
 /**
  * Bot戦略の実行エンジン(マルチペア対応)。
- * ペアごとにティッカーを1分足の終値シリーズへ集約し、そのペアのアクティブ戦略グラフを評価して
+ * ペアごとにティッカーを1分足の終値シリーズへ集約して保持し、評価時には各戦略に設定された
+ * 時間足(CandleTimeframe)へ集計し直したうえで、そのペアのアクティブ戦略グラフを評価して
  * 条件の立ち上がり(false→true)でペーパートレードを執行する。
  */
 
@@ -58,6 +61,7 @@ interface ActiveStrategy {
   id: string;
   name: string;
   pair: string;
+  timeframe: CandleTimeframe;
   graph: StrategyGraph;
   /** positionノードを含むか(含む戦略があるtickでのみ建玉数を問い合わせる) */
   usesPositionNode: boolean;
@@ -234,11 +238,20 @@ export async function reloadActiveStrategies() {
       );
       return [];
     }
+    let timeframe: CandleTimeframe = DEFAULT_CANDLE_TIMEFRAME;
+    if (isCandleTimeframe(row.timeframe)) {
+      timeframe = row.timeframe;
+    } else {
+      console.warn(
+        `[botEngine] 戦略 "${row.name}" の時間足 ${row.timeframe} は不正なため既定値(${DEFAULT_CANDLE_TIMEFRAME})にフォールバックします`
+      );
+    }
     return [
       {
         id: row.id,
         name: row.name,
         pair: row.pair,
+        timeframe,
         graph,
         usesPositionNode: graph.nodes.some((n) => n.type === "position"),
         positionSizeJpy: row.positionSizeJpy,
@@ -376,13 +389,24 @@ export async function onTick(pair: string, price: number, timestampMs: number, v
   const strategies = activeStrategies.filter((s) => s.pair === pair);
   if (strategies.length === 0 || evaluatingPairs.has(pair)) return;
 
-  const closes = closeSeries(state);
-  if (closes.length < 2) return;
+  const rawCloses = closeSeries(state);
+  if (rawCloses.length < 2) return;
 
   evaluatingPairs.add(pair);
   try {
     // このペアのAI判断キャッシュは全戦略で共通(ai_judgmentノードを含む戦略のみが実質的に使う)
     const judgment = getJudgment(pair);
+
+    // 戦略ごとの時間足への集計結果をtick内でメモ化する(同一ペア・時間足の戦略が複数あっても再集計しない)
+    const closesByTimeframe = new Map<CandleTimeframe, number[]>();
+    const closesFor = (tf: CandleTimeframe) => {
+      let c = closesByTimeframe.get(tf);
+      if (!c) {
+        c = getCandlesForTimeframe(pair, tf).map((candle) => candle.close);
+        closesByTimeframe.set(tf, c);
+      }
+      return c;
+    };
 
     // positionノードを使う戦略がある場合のみ、tickあたり1回だけ建玉数をまとめて取得する
     // (tickは高頻度なので、無条件に問い合わせるとDBラウンドトリップが増える)
@@ -399,9 +423,12 @@ export async function onTick(pair: string, price: number, timestampMs: number, v
     }
 
     for (const strategy of strategies) {
-      const cooldownMs = config.bot.cooldownMs;
+      const cooldownMs = Math.max(config.bot.cooldownMs, minutesOfTimeframe(strategy.timeframe) * 60_000);
       const firedAt = lastFiredAt.get(strategy.id) ?? 0;
       if (Date.now() - firedAt < cooldownMs) continue;
+
+      const closes = closesFor(strategy.timeframe);
+      if (closes.length < 2) continue;
 
       const lastSeenAt = lastSeenJudgmentAt.get(strategy.id) ?? 0;
       const isFresh = judgment !== null && judgment.updatedAt > lastSeenAt;
