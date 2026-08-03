@@ -1,6 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import {
+  CANDLE_TIMEFRAMES,
+  DEFAULT_CANDLE_TIMEFRAME,
   evaluateGraph,
+  type CandleTimeframe,
   type GeneratedStrategy,
   type StrategyEdge,
   type StrategyGraph,
@@ -38,13 +41,19 @@ function pairLabel(pair: string): string {
   return pair.toUpperCase().replace("_", "/");
 }
 
-const buildSystemPrompt = (pair: string) => `あなたは${pairLabel(pair)}の1分足で動くトレーディングBotの戦略設計アシスタントです。
+/** 時間足の表示ラベル(例: "1分足")。未知の値はDEFAULT_CANDLE_TIMEFRAMEにフォールバック */
+function timeframeLabel(timeframe: CandleTimeframe): string {
+  const label = CANDLE_TIMEFRAMES.find((t) => t.value === timeframe)?.label;
+  return `${label ?? CANDLE_TIMEFRAMES.find((t) => t.value === DEFAULT_CANDLE_TIMEFRAME)!.label}足`;
+}
+
+const buildSystemPrompt = (pair: string, timeframe: CandleTimeframe) => `あなたは${pairLabel(pair)}の${timeframeLabel(timeframe)}で動くトレーディングBotの戦略設計アシスタントです。
 ユーザーの自由文の要望を、以下のノードグラフ(ブループリント)へ変換してください。
 
 ## ノード仕様
 値には2種類ある: number(数値シリーズ) / bool(真偽シリーズ)。ポートの型が一致する接続のみ有効。
 
-- price: 入力なし → 出力 out(number)。${pairLabel(pair)}の終値(1分足)
+- price: 入力なし → 出力 out(number)。${pairLabel(pair)}の終値(${timeframeLabel(timeframe)})
 - constant: 入力なし → 出力 out(number)。params.value に固定値(RSIしきい値など)
 - position: 入力なし → 出力 out(bool)。この戦略が${pairLabel(pair)}で未決済の建玉を持っているかを表す。
   params.state = "none"(建玉なしのとき真, 既定)|"holding"(建玉ありのとき真)。
@@ -62,7 +71,7 @@ const buildSystemPrompt = (pair: string) => `あなたは${pairLabel(pair)}の1�
 - sell: 入力 condition(bool)。条件が偽→真に変わった瞬間に保有ポジションを決済
 
 ## 実行モデル
-- 条件の「立ち上がりエッジ」で1回だけ発火し、以後60秒のクールダウンがある。
+- 条件の「立ち上がりエッジ」で1回だけ発火し、以後、選択した時間足1本分(最短60秒)のクールダウンがある。
   そのため compare(継続的に真になる)より cross(瞬間だけ真)が発注条件に向くことが多い。
 - 必ず buy ノードを1つ以上含め、可能なら sell ノード(手仕舞い条件)も含めること。
 - ユーザーが「AIの判断も使って」のように明示的に要望した場合のみ ai_judgment ノードを使うこと。
@@ -292,10 +301,11 @@ export function buildUserMessage(prompt: string, reviewContext?: string): string
 export async function generateStrategyFromPrompt(
   prompt: string,
   pair: string = config.targetPair,
-  reviewContext?: string
+  reviewContext?: string,
+  timeframe: CandleTimeframe = DEFAULT_CANDLE_TIMEFRAME
 ): Promise<GeneratedStrategy> {
   const model = config.ai.strategyModel;
-  const systemPrompt = buildSystemPrompt(pair);
+  const systemPrompt = buildSystemPrompt(pair, timeframe);
   const messages: Anthropic.MessageParam[] = [
     {
       role: "user",

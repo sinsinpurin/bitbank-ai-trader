@@ -20,7 +20,10 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import {
+  CANDLE_TIMEFRAMES,
+  DEFAULT_CANDLE_TIMEFRAME,
   evaluateGraph,
+  type CandleTimeframe,
   type GeneratedStrategy,
   type NodeLiveValue,
   type Strategy,
@@ -130,6 +133,7 @@ function StrategyEditor() {
   const [name, setName] = useState(STRATEGY_TEMPLATES[0].name);
   const { pairs, primaryPair, maxPositionJpy } = usePairs();
   const [pair, setPair] = useState(primaryPair);
+  const [timeframe, setTimeframe] = useState<CandleTimeframe>(DEFAULT_CANDLE_TIMEFRAME);
   const [riskForm, setRiskForm] = useState<RiskFormValues>(EMPTY_RISK_FORM);
 
   // /api/pairsの取得完了後、選択中ペアが対象外なら先頭ペアへ寄せる
@@ -257,10 +261,10 @@ function StrategyEditor() {
     try {
       const graph = toGraph(nodes, edges);
       if (selectedId) {
-        await updateStrategy(selectedId, { name: name.trim(), pair, graph, ...risk.value });
+        await updateStrategy(selectedId, { name: name.trim(), pair, timeframe, graph, ...risk.value });
         notify("戦略を上書き保存しました");
       } else {
-        const created = await createStrategy({ name: name.trim(), pair, graph, ...risk.value });
+        const created = await createStrategy({ name: name.trim(), pair, timeframe, graph, ...risk.value });
         setSelectedId(created.id);
         notify("戦略を保存しました。Deployで稼働開始できます");
       }
@@ -270,7 +274,19 @@ function StrategyEditor() {
     } finally {
       setSaving(false);
     }
-  }, [validate, nodes, edges, selectedId, name, pair, riskForm, maxPositionJpy, notify, refreshList]);
+  }, [
+    validate,
+    nodes,
+    edges,
+    selectedId,
+    name,
+    pair,
+    timeframe,
+    riskForm,
+    maxPositionJpy,
+    notify,
+    refreshList,
+  ]);
 
   const handleLoad = useCallback(
     (strategy: Strategy) => {
@@ -280,6 +296,7 @@ function StrategyEditor() {
       setSelectedId(strategy.id);
       setName(strategy.name);
       setPair(strategy.pair);
+      setTimeframe(strategy.timeframe);
       setRiskForm(riskFormFromStrategy(strategy));
       notify(`戦略 "${strategy.name}" を読み込みました`);
     },
@@ -291,6 +308,7 @@ function StrategyEditor() {
     setEdges([]);
     setSelectedId(null);
     setName("NEW STRATEGY");
+    setTimeframe(DEFAULT_CANDLE_TIMEFRAME);
     setRiskForm(EMPTY_RISK_FORM);
   }, [setNodes, setEdges]);
 
@@ -314,8 +332,8 @@ function StrategyEditor() {
   // キャンバス上のグラフを日本語の戦略説明へ変換(編集に追従)
   const preview = useMemo(() => describeGraph(toGraph(nodes, edges)), [nodes, edges]);
 
-  // 現在の相場データ(選択ペアの1分足履歴)で各ノードを評価し、◯/✕・数値をライブ表示する
-  const closes = useLiveCandles(pair);
+  // 現在の相場データ(選択ペア・時間足の履歴)で各ノードを評価し、◯/✕・数値をライブ表示する
+  const closes = useLiveCandles(pair, timeframe);
   // AI Judgmentノードのライブプレビュー用(このペアの最新AI判断キャッシュを15秒間隔で取得)
   const aiJudgment = useAiJudgment(pair);
   // Positionノードのライブプレビュー用(未保存のキャンバスは建玉なし=falseとして評価する)
@@ -456,6 +474,28 @@ function StrategyEditor() {
                 </option>
               ))}
             </chakra.select>
+            <chakra.select
+              value={timeframe}
+              onChange={(e) => setTimeframe(e.target.value as CandleTimeframe)}
+              bg="bg.surface"
+              borderWidth="1px"
+              borderColor="border.gridCyan"
+              borderRadius="0"
+              fontFamily="heading"
+              fontSize="13px"
+              letterSpacing="0.1em"
+              color="signal.cyan"
+              px={3}
+              py={2}
+              cursor="pointer"
+              _focus={{ borderColor: "signal.cyan", boxShadow: "glowCyanSm", outline: "none" }}
+            >
+              {CANDLE_TIMEFRAMES.map((tf) => (
+                <option key={tf.value} value={tf.value} style={{ background: "#131318" }}>
+                  {tf.label}
+                </option>
+              ))}
+            </chakra.select>
             <CyberButton variant="primary" onClick={handleSave} disabled={saving}>
               {saving ? "Saving..." : selectedId ? "Update" : "Save"}
             </CyberButton>
@@ -537,7 +577,9 @@ function StrategyEditor() {
             パレットをクリック or ドラッグ&ドロップで配置 / ポート同士をドラッグで接続 /
             Backspaceで選択要素を削除。シアン◈=数値、オレンジ◈=条件(真偽)。{" "}
             {liveValues
-              ? `LIVE: ${pairLabel(pair)} 1分足×${closes.length}本で各ノードを評価中(10秒ごと更新)`
+              ? `LIVE: ${pairLabel(pair)} ${
+                  CANDLE_TIMEFRAMES.find((t) => t.value === timeframe)?.label ?? timeframe
+                }足×${closes.length}本で各ノードを評価中(10秒ごと更新)`
               : "LIVE評価は停止中(サーバー未接続またはデータ蓄積中)"}
           </Text>
 
@@ -572,7 +614,12 @@ function StrategyEditor() {
       <GridItem>
         <Stack gap={6}>
           <CyberPanel title="AI Strategy Gen" code="03 / GEN" accent="red">
-            <AiGeneratePanel pair={pair} onGenerated={handleGenerated} initialReviewContext={reviewContext} />
+            <AiGeneratePanel
+              pair={pair}
+              timeframe={timeframe}
+              onGenerated={handleGenerated}
+              initialReviewContext={reviewContext}
+            />
           </CyberPanel>
           <CyberPanel title="Strategy Templates" code="04 / LIB" accent="cyan" collapsible>
             <Box maxH="380px" overflowY="auto" pr={1}>

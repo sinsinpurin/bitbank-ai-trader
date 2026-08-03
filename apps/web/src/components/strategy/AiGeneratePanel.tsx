@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Box, Stack, Text, Textarea } from "@chakra-ui/react";
-import type { GeneratedStrategy } from "@noctas/shared";
+import { CANDLE_TIMEFRAMES, type CandleTimeframe, type GeneratedStrategy } from "@noctas/shared";
 import { CyberButton } from "@/components/ui/CyberButton";
 import { generateStrategy } from "@/lib/strategyApi";
 
@@ -21,11 +21,14 @@ const REVIEW_DEFAULT_PROMPT = "直近の取引レビューの改善提案を踏�
  */
 export function AiGeneratePanel({
   pair,
+  timeframe,
   onGenerated,
   initialReviewContext,
 }: {
   /** 生成対象のペア(エディタで選択中のもの) */
   pair?: string;
+  /** 生成対象の時間足(エディタで選択中のもの) */
+  timeframe: CandleTimeframe;
   onGenerated: (result: GeneratedStrategy) => void;
   /** P&L ReportのAI Reviewから引き継いだ参考テキスト(あれば生成プロンプトへ組み込む) */
   initialReviewContext?: string | null;
@@ -49,7 +52,7 @@ export function AiGeneratePanel({
     setLoading(true);
     setError(null);
     try {
-      onGenerated(await generateStrategy(trimmed, pair, reviewContext ?? undefined));
+      onGenerated(await generateStrategy(trimmed, pair, reviewContext ?? undefined, timeframe));
     } catch (err) {
       setError(err instanceof Error ? err.message : "生成に失敗しました");
     } finally {
@@ -93,6 +96,10 @@ export function AiGeneratePanel({
         _focus={{ borderColor: "signal.cyan", boxShadow: "glowCyanSm" }}
         disabled={loading}
       />
+
+      <Text fontFamily="mono" fontSize="10px" color="text.disabled">
+        対象: {pair ?? "既定ペア"} / {CANDLE_TIMEFRAMES.find((t) => t.value === timeframe)?.label ?? timeframe}足
+      </Text>
 
       <CyberButton variant="primary" onClick={handleGenerate} disabled={loading || !prompt.trim()}>
         {loading ? "GENERATING..." : "AIで戦略を生成"}

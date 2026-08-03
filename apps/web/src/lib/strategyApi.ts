@@ -1,4 +1,4 @@
-import type { GeneratedStrategy, Strategy, StrategyGraph } from "@noctas/shared";
+import type { CandleTimeframe, GeneratedStrategy, Strategy, StrategyGraph } from "@noctas/shared";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -25,6 +25,7 @@ export interface StrategyRiskInput {
 export async function createStrategy(input: {
   name: string;
   pair?: string;
+  timeframe?: CandleTimeframe;
   description?: string;
   graph: StrategyGraph;
 } & StrategyRiskInput): Promise<Strategy> {
@@ -42,6 +43,7 @@ export async function updateStrategy(
   input: Partial<{
     name: string;
     pair: string;
+    timeframe: CandleTimeframe;
     description: string;
     graph: StrategyGraph;
     isActive: boolean;
@@ -60,13 +62,14 @@ export async function updateStrategy(
 export async function generateStrategy(
   prompt: string,
   pair?: string,
-  reviewContext?: string
+  reviewContext?: string,
+  timeframe?: CandleTimeframe
 ): Promise<GeneratedStrategy> {
   return handle(
     await fetch(`${API_URL}/api/strategies/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, pair, reviewContext }),
+      body: JSON.stringify({ prompt, pair, reviewContext, timeframe }),
     })
   );
 }

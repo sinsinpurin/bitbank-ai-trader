@@ -1,6 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import type { Strategy as PrismaStrategy } from "@prisma/client";
-import { parseGraph, type Strategy, type StrategyGraph } from "@noctas/shared";
+import {
+  DEFAULT_CANDLE_TIMEFRAME,
+  isCandleTimeframe,
+  parseGraph,
+  type CandleTimeframe,
+  type Strategy,
+  type StrategyGraph,
+} from "@noctas/shared";
 import { prisma } from "../db/prisma";
 import { reloadActiveStrategies } from "./botEngine";
 import { broadcast } from "../ws/relay";
@@ -13,6 +20,7 @@ function toStrategyDto(row: PrismaStrategy): Strategy {
     id: row.id,
     name: row.name,
     pair: row.pair,
+    timeframe: isCandleTimeframe(row.timeframe) ? row.timeframe : DEFAULT_CANDLE_TIMEFRAME,
     description: row.description,
     graph: parseGraph(row.graph) ?? { nodes: [], edges: [] },
     isActive: row.isActive,
@@ -29,6 +37,7 @@ function toStrategyDto(row: PrismaStrategy): Strategy {
 export interface StrategyBody {
   name?: string;
   pair?: string;
+  timeframe?: CandleTimeframe;
   description?: string;
   graph?: StrategyGraph;
   isActive?: boolean;
@@ -121,17 +130,21 @@ export async function strategyRoutes(app: FastifyInstance) {
 
   // 自由文の要望からAIで戦略グラフを生成する(保存はしない — エディタで確認・調整後にSave)
   // reviewContextはP&L ReportのAI Review結果から引き継がれた参考テキスト(任意)
-  app.post<{ Body: { prompt?: string; pair?: string; reviewContext?: string } }>(
+  app.post<{ Body: { prompt?: string; pair?: string; reviewContext?: string; timeframe?: string } }>(
     "/api/strategies/generate",
     async (request, reply) => {
       const prompt = request.body?.prompt?.trim();
       const pair = request.body?.pair ?? config.targetPair;
       const reviewContext = request.body?.reviewContext?.trim() || undefined;
+      const timeframe = request.body?.timeframe ?? DEFAULT_CANDLE_TIMEFRAME;
       if (!prompt) {
         return reply.status(400).send({ error: "prompt は必須です" });
       }
       if (!isValidPair(pair)) {
         return reply.status(400).send({ error: `未対応のペアです: ${pair}` });
+      }
+      if (!isCandleTimeframe(timeframe)) {
+        return reply.status(400).send({ error: `未対応の時間足です: ${timeframe}` });
       }
       if (prompt.length > 1000) {
         return reply.status(400).send({ error: "prompt は1000文字以内で入力してください" });
@@ -149,7 +162,7 @@ export async function strategyRoutes(app: FastifyInstance) {
       }
 
       try {
-        return await generateStrategyFromPrompt(prompt, pair, reviewContext);
+        return await generateStrategyFromPrompt(prompt, pair, reviewContext, timeframe);
       } catch (err) {
         request.log.error(err, "戦略グラフのAI生成に失敗しました");
         return reply.status(502).send({
@@ -160,12 +173,15 @@ export async function strategyRoutes(app: FastifyInstance) {
   );
 
   app.post<{ Body: StrategyBody }>("/api/strategies", async (request, reply) => {
-    const { name, pair, description, graph } = request.body ?? {};
+    const { name, pair, timeframe, description, graph } = request.body ?? {};
     if (!name || !validateGraph(graph)) {
       return reply.status(400).send({ error: "name と graph (nodes/edges) は必須です" });
     }
     if (pair !== undefined && !isValidPair(pair)) {
       return reply.status(400).send({ error: `未対応のペアです: ${pair}` });
+    }
+    if (timeframe !== undefined && !isCandleTimeframe(timeframe)) {
+      return reply.status(400).send({ error: `未対応の時間足です: ${timeframe}` });
     }
     const riskError = validateRiskSettings(request.body ?? {});
     if (riskError) {
@@ -176,6 +192,7 @@ export async function strategyRoutes(app: FastifyInstance) {
       data: {
         name,
         pair: pair ?? config.targetPair,
+        timeframe: timeframe ?? DEFAULT_CANDLE_TIMEFRAME,
         description: description ?? "",
         graph: JSON.stringify(graph),
         ...riskSettingsData(request.body ?? {}),
@@ -191,13 +208,16 @@ export async function strategyRoutes(app: FastifyInstance) {
     "/api/strategies/:id",
     async (request, reply) => {
       const { id } = request.params;
-      const { name, pair, description, graph, isActive } = request.body ?? {};
+      const { name, pair, timeframe, description, graph, isActive } = request.body ?? {};
 
       if (graph !== undefined && !validateGraph(graph)) {
         return reply.status(400).send({ error: "graph の形式が不正です" });
       }
       if (pair !== undefined && !isValidPair(pair)) {
         return reply.status(400).send({ error: `未対応のペアです: ${pair}` });
+      }
+      if (timeframe !== undefined && !isCandleTimeframe(timeframe)) {
+        return reply.status(400).send({ error: `未対応の時間足です: ${timeframe}` });
       }
       const riskError = validateRiskSettings(request.body ?? {});
       if (riskError) {
@@ -214,6 +234,7 @@ export async function strategyRoutes(app: FastifyInstance) {
         data: {
           ...(name !== undefined ? { name } : {}),
           ...(pair !== undefined ? { pair } : {}),
+          ...(timeframe !== undefined ? { timeframe } : {}),
           ...(description !== undefined ? { description } : {}),
           ...(graph !== undefined ? { graph: JSON.stringify(graph) } : {}),
           ...(isActive !== undefined ? { isActive } : {}),

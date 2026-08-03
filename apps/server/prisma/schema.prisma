@@ -73,6 +73,7 @@ model Strategy {
   id          String   @id @default(cuid())
   name        String
   pair        String   @default("btc_jpy") // 対象ペア(例: "btc_jpy" | "eth_jpy")
+  timeframe   String   @default("1min") // 戦略グラフを評価する時間足(CandleTimeframe)
   description String   @default("")
   graph       String // StrategyGraph(ノード/エッジ)のJSON文字列
   isActive    Boolean  @default(false)
