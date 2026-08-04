@@ -120,7 +120,7 @@ export function BacktestPanel({ graph, pair, timeframe, riskForm, maxPositionJpy
 
       {summary && (
         <Stack gap={4}>
-          <SimpleGrid columns={{ base: 2, md: 4, xl: 8 }} gap={3}>
+          <SimpleGrid columns={2} gap={3}>
             <Tile
               label="Realized P&L"
               value={formatSignedJpy(summary.realizedPnl)}
