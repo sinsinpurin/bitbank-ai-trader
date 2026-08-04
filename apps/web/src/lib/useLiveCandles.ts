@@ -10,18 +10,24 @@ interface CandlesResponse {
   pair: string;
   times: number[];
   closes: number[];
+  volumes: number[];
+}
+
+export interface LiveCandles {
+  closes: number[];
+  volumes: number[];
 }
 
 /**
- * サーバー(Botエンジン)が保持する1分足終値履歴をポーリングで取得する。
+ * サーバー(Botエンジン)が保持する1分足終値・出来高履歴をポーリングで取得する。
  * エディタ上のノードを「Botが実際に見ているのと同じデータ」で評価するために使う。
  */
-export function useLiveCandles(pair?: string, timeframe?: CandleTimeframe): number[] {
-  const [closes, setCloses] = useState<number[]>([]);
+export function useLiveCandles(pair?: string, timeframe?: CandleTimeframe): LiveCandles {
+  const [candles, setCandles] = useState<LiveCandles>({ closes: [], volumes: [] });
 
   useEffect(() => {
     let cancelled = false;
-    setCloses([]);
+    setCandles({ closes: [], volumes: [] });
 
     const load = async () => {
       try {
@@ -33,7 +39,10 @@ export function useLiveCandles(pair?: string, timeframe?: CandleTimeframe): numb
         if (!res.ok) return;
         const data = (await res.json()) as CandlesResponse;
         if (!cancelled && Array.isArray(data.closes)) {
-          setCloses(data.closes);
+          setCandles({
+            closes: data.closes,
+            volumes: Array.isArray(data.volumes) ? data.volumes : [],
+          });
         }
       } catch {
         // サーバー未起動時は静かにリトライ
@@ -48,5 +57,5 @@ export function useLiveCandles(pair?: string, timeframe?: CandleTimeframe): numb
     };
   }, [pair, timeframe]);
 
-  return closes;
+  return candles;
 }

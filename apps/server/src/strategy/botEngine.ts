@@ -397,16 +397,20 @@ export async function onTick(pair: string, price: number, timestampMs: number, v
     // このペアのAI判断キャッシュは全戦略で共通(ai_judgmentノードを含む戦略のみが実質的に使う)
     const judgment = getJudgment(pair);
 
-    // 戦略ごとの時間足への集計結果をtick内でメモ化する(同一ペア・時間足の戦略が複数あっても再集計しない)
-    const closesByTimeframe = new Map<CandleTimeframe, number[]>();
-    const closesFor = (tf: CandleTimeframe) => {
-      let c = closesByTimeframe.get(tf);
+    // 戦略ごとの時間足への集計結果をtick内でメモ化する(同一ペア・時間足の戦略が複数あっても再集計しない)。
+    // 集計済みCandleBucket[]自体をメモ化し、closesとvolumesの両方をそこから導出することで、
+    // 二重の集計呼び出しを避けつつ両シリーズが必ず同じローソク足集合由来であることを保証する。
+    const candlesByTimeframe = new Map<CandleTimeframe, CandleBucket[]>();
+    const candlesFor = (tf: CandleTimeframe) => {
+      let c = candlesByTimeframe.get(tf);
       if (!c) {
-        c = getCandlesForTimeframe(pair, tf).map((candle) => candle.close);
-        closesByTimeframe.set(tf, c);
+        c = getCandlesForTimeframe(pair, tf);
+        candlesByTimeframe.set(tf, c);
       }
       return c;
     };
+    const closesFor = (tf: CandleTimeframe) => candlesFor(tf).map((candle) => candle.close);
+    const volumesFor = (tf: CandleTimeframe) => candlesFor(tf).map((candle) => candle.volume);
 
     // positionノードを使う戦略がある場合のみ、tickあたり1回だけ建玉数をまとめて取得する
     // (tickは高頻度なので、無条件に問い合わせるとDBラウンドトリップが増える)
@@ -435,6 +439,7 @@ export async function onTick(pair: string, price: number, timestampMs: number, v
       const evaluation = evaluateGraph(strategy.graph, closes, {
         aiJudgment: judgment && { action: judgment.action, confidence: judgment.confidence, isFresh },
         hasOpenPosition: (openPositionCounts.get(strategy.id) ?? 0) > 0,
+        volumes: volumesFor(strategy.timeframe),
       });
       if (judgment) lastSeenJudgmentAt.set(strategy.id, judgment.updatedAt);
 

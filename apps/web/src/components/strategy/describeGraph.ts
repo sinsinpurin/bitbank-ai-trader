@@ -46,6 +46,8 @@ export function describeGraph(graph: StrategyGraph): GraphDescription {
       switch (node.type) {
         case "price":
           return "終値";
+        case "volume":
+          return "出来高";
         case "constant":
           return formatValue(node.params.value);
         case "position":

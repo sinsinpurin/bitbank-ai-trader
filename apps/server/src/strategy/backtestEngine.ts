@@ -196,8 +196,10 @@ export function runBacktest(request: BacktestRequest): BacktestSummary {
   }
 
   const closes: number[] = [];
+  const volumes: number[] = [];
   for (const candle of candles) {
     closes.push(candle.close);
+    volumes.push(candle.volume);
 
     // 1) 出口条件(SL/TP/トレーリング)の判定を先に行う(botEngine.onTickと同様、checkExits相当を先に評価する)
     for (let i = openPositions.length - 1; i >= 0; i -= 1) {
@@ -213,6 +215,7 @@ export function runBacktest(request: BacktestRequest): BacktestSummary {
     const evaluation = evaluateGraph(request.graph, closes, {
       hasOpenPosition: openPositions.length > 0,
       aiJudgment: null,
+      volumes,
     });
 
     if (evaluation.errors.length > 0) {

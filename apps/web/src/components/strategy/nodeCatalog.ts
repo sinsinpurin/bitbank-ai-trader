@@ -54,6 +54,16 @@ export const NODE_CATALOG: NodeDef[] = [
     paramFields: [],
   },
   {
+    type: "volume",
+    label: "Volume",
+    category: "source",
+    description: "その足の出来高シリーズ。SMA/EMAと組み合わせて出来高移動平均、Cross/Compareと組み合わせて出来高スパイク検知に使う",
+    inputs: [],
+    outputs: [{ id: "out", label: "volume", kind: "number" }],
+    defaultParams: {},
+    paramFields: [],
+  },
+  {
     type: "constant",
     label: "Constant",
     category: "source",
