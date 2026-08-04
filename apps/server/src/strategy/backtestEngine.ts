@@ -1,0 +1,258 @@
+import {
+  evaluateGraph,
+  type BacktestRequest,
+  type BacktestSummary,
+  type BacktestTrade,
+  type PnlCurvePoint,
+  type TradeReason,
+} from "@noctas/shared";
+import { config } from "../config";
+import { getCandlesForTimeframe, type CandleBucket } from "./botEngine";
+import { executionPrice, feeOf } from "../trading/paperTradingEngine";
+import { resolveExitReason } from "../trading/riskManager";
+
+/**
+ * Bot Blueprintのグラフを、サーバーが既に保持している過去ローソク足履歴に対して
+ * ウォークフォワードで再生する読み取り専用のバックテストエンジン。
+ * 実際のポジション管理(trading/paperTradingEngine.ts)・AI判断ループには一切書き込みも呼び出しも行わない。
+ *
+ * 既知の簡略化(いずれもUI/Docsに明記する):
+ * - ai_judgmentノードは過去の判断ログを再現できないため、常に不成立(false)として評価する
+ * - サーキットブレーカー(trading/circuitBreaker.ts)はシミュレートしない
+ * - 出口条件(SL/TP/トレーリング)はローソク足の高値/低値を使うが、同一足内で両方の条件を
+ *   満たす場合は「安値側(ストップロス/トレーリング)が先に発生した」と保守的に仮定する
+ * - JPY残高・同時保有できる資産量などの資金制約はシミュレートしない(maxOpenPositionsのみ適用)
+ */
+
+interface OpenSimPosition {
+  entryPrice: number;
+  amount: number;
+  entryFee: number;
+  openedAt: number;
+  highestPrice: number;
+}
+
+function emptySummary(candleCount: number, warnings: string[]): BacktestSummary {
+  return {
+    candleCount,
+    warnings,
+    realizedPnl: 0,
+    winCount: 0,
+    lossCount: 0,
+    winRate: null,
+    avgWin: null,
+    avgLoss: null,
+    profitFactor: null,
+    maxDrawdown: 0,
+    totalFeesJpy: 0,
+    grossPnlJpy: 0,
+    feeLossCount: 0,
+    equityCurve: [],
+    trades: [],
+  };
+}
+
+/**
+ * 1本の足について、保有中のポジションが出口条件(SL/TP/トレーリング)に達したかを判定する。
+ * 安値(low)でストップロス/トレーリングストップを、高値(high)でテイクプロフィットを判定し、
+ * 両方が同一足内で成立する場合は安値側(ストップロス/トレーリング優先)が先に発生したとみなす。
+ */
+function checkPositionExit(
+  pos: OpenSimPosition,
+  candle: CandleBucket,
+  stopLossPct: number | null,
+  takeProfitPct: number | null,
+  trailingStopPct: number | null
+): { reason: TradeReason; price: number } | null {
+  if (candle.high > pos.highestPrice) pos.highestPrice = candle.high;
+
+  // 安値側: take_profitは無効化(0=利確なし指定)してstop_loss/trailing_stopだけ判定する
+  const worstCase = resolveExitReason({
+    entryPrice: pos.entryPrice,
+    currentPrice: candle.low,
+    highestPrice: pos.highestPrice,
+    stopLossPct,
+    takeProfitPct: 0,
+    trailingStopPct,
+  });
+  if (worstCase.reason && worstCase.triggerPrice !== null) {
+    return { reason: worstCase.reason, price: worstCase.triggerPrice };
+  }
+
+  // 高値側: stop_loss/trailing_stopは既に安値側で判定済みなので無効化し、take_profitだけ判定する
+  const bestCase = resolveExitReason({
+    entryPrice: pos.entryPrice,
+    currentPrice: candle.high,
+    highestPrice: pos.highestPrice,
+    stopLossPct: Number.POSITIVE_INFINITY,
+    takeProfitPct,
+    trailingStopPct: null,
+  });
+  if (bestCase.reason && bestCase.triggerPrice !== null) {
+    return { reason: bestCase.reason, price: bestCase.triggerPrice };
+  }
+  return null;
+}
+
+/** paperTradingEngine.closePosition()と同じ計算式でポジションを仮想決済する */
+function closeSimPosition(
+  pos: OpenSimPosition,
+  triggerPrice: number,
+  reason: TradeReason,
+  closedAtMs: number
+): BacktestTrade {
+  const execPrice = executionPrice(triggerPrice, "sell");
+  const proceeds = execPrice * pos.amount;
+  const exitFee = feeOf(proceeds);
+  const pnl = (execPrice - pos.entryPrice) * pos.amount - pos.entryFee - exitFee;
+
+  return {
+    side: "buy",
+    entryPrice: pos.entryPrice,
+    amount: pos.amount,
+    openedAt: pos.openedAt,
+    closedAt: closedAtMs,
+    closePrice: execPrice,
+    pnl,
+    closeReason: reason,
+    totalFeeJpy: pos.entryFee + exitFee,
+  };
+}
+
+/** paperTradingEngine.openBuyPosition()と同じ計算式で仮想ポジションを建てる */
+function openSimPosition(marketPrice: number, sizeJpy: number, openedAtMs: number): OpenSimPosition {
+  const execPrice = executionPrice(marketPrice, "buy");
+  const amount = sizeJpy / execPrice;
+  const cost = execPrice * amount;
+  const entryFee = feeOf(cost);
+  return { entryPrice: execPrice, amount, entryFee, openedAt: openedAtMs, highestPrice: execPrice };
+}
+
+export function runBacktest(request: BacktestRequest): BacktestSummary {
+  const warnings: string[] = [];
+  if (request.graph.nodes.some((n) => n.type === "ai_judgment")) {
+    warnings.push(
+      "このグラフには AI Judgment ノードが含まれています。過去のAI判断ログは保存されていないため再現できず、" +
+        "バックテストでは常に不成立(発火しない)として扱われます。実際にDeployした場合の結果とは異なります。"
+    );
+  }
+
+  const candles = getCandlesForTimeframe(request.pair, request.timeframe);
+  const candleCount = candles.length;
+  if (candleCount < 2) {
+    warnings.push("ローソク足データが不足しているため、バックテストを実行できませんでした(最低2本必要)。");
+    return emptySummary(candleCount, warnings);
+  }
+
+  const positionSizeJpy = Math.min(
+    request.positionSizeJpy ?? config.risk.maxPositionJpy,
+    config.risk.maxPositionJpy
+  );
+  const maxOpenPositions = request.maxOpenPositions ?? config.risk.maxOpenPositions;
+  const stopLossPct = request.stopLossPct ?? null;
+  const takeProfitPct = request.takeProfitPct ?? null;
+  const trailingStopPct = request.trailingStopPct ?? null;
+
+  const openPositions: OpenSimPosition[] = [];
+  const trades: BacktestTrade[] = [];
+  const equityCurve: PnlCurvePoint[] = [];
+  let realizedPnl = 0;
+  let winCount = 0;
+  let lossCount = 0;
+  let grossProfit = 0;
+  let grossLoss = 0;
+  let totalFeesJpy = 0;
+  let grossPnlJpy = 0;
+  let feeLossCount = 0;
+  let peak = 0;
+  let maxDrawdown = 0;
+  const seenErrors = new Set<string>();
+
+  function recordClose(trade: BacktestTrade) {
+    trades.push(trade);
+    realizedPnl += trade.pnl;
+    totalFeesJpy += trade.totalFeeJpy;
+    const grossPnl = trade.pnl + trade.totalFeeJpy;
+    grossPnlJpy += grossPnl;
+    if (grossPnl > 0 && trade.pnl <= 0) {
+      feeLossCount += 1;
+    }
+    if (trade.pnl >= 0) {
+      winCount += 1;
+      grossProfit += trade.pnl;
+    } else {
+      lossCount += 1;
+      grossLoss += -trade.pnl;
+    }
+    const time = Math.floor(trade.closedAt / 1000);
+    const last = equityCurve[equityCurve.length - 1];
+    if (last && last.time === time) {
+      last.value = realizedPnl;
+    } else {
+      equityCurve.push({ time, value: realizedPnl });
+    }
+    peak = Math.max(peak, realizedPnl);
+    maxDrawdown = Math.max(maxDrawdown, peak - realizedPnl);
+  }
+
+  const closes: number[] = [];
+  for (const candle of candles) {
+    closes.push(candle.close);
+
+    // 1) 出口条件(SL/TP/トレーリング)の判定を先に行う(botEngine.onTickと同様、checkExits相当を先に評価する)
+    for (let i = openPositions.length - 1; i >= 0; i -= 1) {
+      const pos = openPositions[i];
+      const exit = checkPositionExit(pos, candle, stopLossPct, takeProfitPct, trailingStopPct);
+      if (!exit) continue;
+      openPositions.splice(i, 1);
+      recordClose(closeSimPosition(pos, exit.price, exit.reason, candle.time * 1000));
+    }
+
+    if (closes.length < 2) continue;
+
+    const evaluation = evaluateGraph(request.graph, closes, {
+      hasOpenPosition: openPositions.length > 0,
+      aiJudgment: null,
+    });
+
+    if (evaluation.errors.length > 0) {
+      for (const err of evaluation.errors) seenErrors.add(err);
+      continue;
+    }
+
+    const shouldSell = evaluation.sell.current && !evaluation.sell.previous;
+    const shouldBuy = evaluation.buy.current && !evaluation.buy.previous;
+
+    // buy/sellが同時成立した場合はbotEngineと同様、安全側に倒して売りのみ実行する
+    if (shouldSell) {
+      const pos = openPositions.shift();
+      if (pos) {
+        recordClose(closeSimPosition(pos, candle.close, "bot_strategy", candle.time * 1000));
+      }
+    } else if (shouldBuy && openPositions.length < maxOpenPositions) {
+      openPositions.push(openSimPosition(candle.close, positionSizeJpy, candle.time * 1000));
+    }
+  }
+
+  if (seenErrors.size > 0) {
+    warnings.push(`グラフの評価中にエラーが発生した区間があります: ${[...seenErrors].join(" / ")}`);
+  }
+
+  return {
+    candleCount,
+    warnings,
+    realizedPnl,
+    winCount,
+    lossCount,
+    winRate: winCount + lossCount > 0 ? winCount / (winCount + lossCount) : null,
+    avgWin: winCount > 0 ? grossProfit / winCount : null,
+    avgLoss: lossCount > 0 ? -(grossLoss / lossCount) : null,
+    profitFactor: grossLoss > 0 ? grossProfit / grossLoss : null,
+    maxDrawdown,
+    totalFeesJpy,
+    grossPnlJpy,
+    feeLossCount,
+    equityCurve,
+    trades,
+  };
+}

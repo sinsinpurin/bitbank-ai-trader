@@ -48,6 +48,7 @@ import {
   type RiskFormValues,
 } from "@/components/strategy/RiskSettingsPanel";
 import { StrategyPreview } from "@/components/strategy/StrategyPreview";
+import { BacktestPanel } from "@/components/strategy/BacktestPanel";
 import { describeGraph } from "@/components/strategy/describeGraph";
 import { STRATEGY_TEMPLATES, type StrategyTemplate } from "@/components/strategy/strategyTemplates";
 import { NODE_CATALOG, NODE_DEF_BY_TYPE, type PortKind } from "@/components/strategy/nodeCatalog";
@@ -339,8 +340,9 @@ function StrategyEditor() {
     [notify, refreshList]
   );
 
-  // キャンバス上のグラフを日本語の戦略説明へ変換(編集に追従)
-  const preview = useMemo(() => describeGraph(toGraph(nodes, edges)), [nodes, edges]);
+  // キャンバス上のグラフ(編集に追従)。日本語の戦略説明・バックテストの両方から参照する
+  const currentGraph = useMemo(() => toGraph(nodes, edges), [nodes, edges]);
+  const preview = useMemo(() => describeGraph(currentGraph), [currentGraph]);
 
   // 現在の相場データ(選択ペア・時間足の履歴)で各ノードを評価し、◯/✕・数値をライブ表示する
   const closes = useLiveCandles(pair, timeframe);
@@ -641,6 +643,16 @@ function StrategyEditor() {
 
           <CyberPanel title="Risk Settings / リスク設定" code="02b / RISK" accent="red" collapsible>
             <RiskSettingsPanel values={riskForm} onChange={setRiskForm} maxPositionJpy={maxPositionJpy} />
+          </CyberPanel>
+
+          <CyberPanel title="Backtest" code="02c / SIM" accent="cyan" collapsible>
+            <BacktestPanel
+              graph={currentGraph}
+              pair={pair}
+              timeframe={timeframe}
+              riskForm={riskForm}
+              maxPositionJpy={maxPositionJpy}
+            />
           </CyberPanel>
         </Stack>
       </GridItem>

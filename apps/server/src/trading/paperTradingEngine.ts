@@ -15,14 +15,18 @@ export function assetCurrencyOf(pair: string): string {
 /**
  * 成行想定の約定価格(スリッページ反映)。買いは不利に高く、売りは不利に安く約定する。
  * 実運用との乖離を減らすためのシミュレーションで、TRADE_SLIPPAGE_PCT で調整できる。
+ * strategy/backtestEngine.ts からも同じ計算式で再利用する(重複実装しない)。
  */
-function executionPrice(marketPrice: number, side: "buy" | "sell"): number {
+export function executionPrice(marketPrice: number, side: "buy" | "sell"): number {
   const slip = config.fees.slippagePct / 100;
   return side === "buy" ? marketPrice * (1 + slip) : marketPrice * (1 - slip);
 }
 
-/** 約定金額に対する手数料(円)。bitbank現物taker 0.12% 相当(TRADE_FEE_PCT) */
-function feeOf(notionalJpy: number): number {
+/**
+ * 約定金額に対する手数料(円)。bitbank現物taker 0.12% 相当(TRADE_FEE_PCT)。
+ * strategy/backtestEngine.ts からも同じ計算式で再利用する(重複実装しない)。
+ */
+export function feeOf(notionalJpy: number): number {
   return notionalJpy * (config.fees.takerFeePct / 100);
 }
 

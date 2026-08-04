@@ -21,19 +21,33 @@ export const STRATEGY_TEMPLATES: StrategyTemplate[] = [
   {
     id: "sma-golden-cross",
     name: "SMA GOLDEN CROSS",
-    tagline: "王道のトレンド転換狙い",
-    flow: "Price → SMA(5) / SMA(20) → Cross → Buy / Sell",
+    tagline: "王道のトレンド転換狙い(RSIで過熱を回避)",
+    flow: "Price → SMA(5) / SMA(20) → Cross AND RSI(14)フィルタ → Buy / Sell",
     description:
-      "短期SMA(5)が長期SMA(20)を上抜けた瞬間(ゴールデンクロス)に買い、下抜けた瞬間(デッドクロス)に売り。移動平均2本のクロスでトレンドの転換を捉える最も定番の型です。",
+      "短期SMA(5)が長期SMA(20)を上抜けた瞬間(ゴールデンクロス)に買い、下抜けた瞬間(デッドクロス)に売り。" +
+      "ただし、クロスだけで即エントリーするとダマシ(高値づかみ・安値売り)を拾いやすいため、" +
+      "RSI(14)が70以下のときだけ買い、30以上のときだけ売る、というフィルタを付けています。" +
+      "バックテストで検証したところ、フィルタ無しでは手数料抜きの損益(値幅合計)もマイナスでしたが、" +
+      "このRSIフィルタを足すことでプラスに転換することを確認済みです。" +
+      "ただし手数料込みの純損益は依然としてマイナスで、勝率・プロフィットファクターも低いままです" +
+      "(このテンプレートをそのままDeployして勝てることを保証するものではありません。" +
+      "Backtestパネルで自分の目で数値を確認してから使ってください)。",
     graph: {
       nodes: [
         { id: "gc_price", type: "price", params: {}, position: { x: 0, y: 130 } },
         { id: "gc_fast", type: "sma", params: { period: 5 }, position: { x: 220, y: 30 } },
         { id: "gc_slow", type: "sma", params: { period: 20 }, position: { x: 220, y: 230 } },
+        { id: "gc_rsi", type: "rsi", params: { period: 14 }, position: { x: 220, y: 420 } },
+        { id: "gc_c70", type: "constant", params: { value: 70 }, position: { x: 220, y: 560 } },
+        { id: "gc_c30", type: "constant", params: { value: 30 }, position: { x: 460, y: 560 } },
         { id: "gc_up", type: "cross", params: { op: "cross_above" }, position: { x: 460, y: 70 } },
         { id: "gc_down", type: "cross", params: { op: "cross_below" }, position: { x: 460, y: 250 } },
-        { id: "gc_buy", type: "buy", params: {}, position: { x: 700, y: 70 } },
-        { id: "gc_sell", type: "sell", params: {}, position: { x: 700, y: 250 } },
+        { id: "gc_not_overbought", type: "compare", params: { op: "lte" }, position: { x: 460, y: 420 } },
+        { id: "gc_not_oversold", type: "compare", params: { op: "gte" }, position: { x: 700, y: 490 } },
+        { id: "gc_and_buy", type: "logic", params: { op: "and" }, position: { x: 700, y: 150 } },
+        { id: "gc_and_sell", type: "logic", params: { op: "and" }, position: { x: 940, y: 330 } },
+        { id: "gc_buy", type: "buy", params: {}, position: { x: 940, y: 70 } },
+        { id: "gc_sell", type: "sell", params: {}, position: { x: 1180, y: 330 } },
       ],
       edges: [
         { id: "gc_e1", source: "gc_price", sourceHandle: "out", target: "gc_fast", targetHandle: "in" },
@@ -42,8 +56,16 @@ export const STRATEGY_TEMPLATES: StrategyTemplate[] = [
         { id: "gc_e4", source: "gc_slow", sourceHandle: "out", target: "gc_up", targetHandle: "b" },
         { id: "gc_e5", source: "gc_fast", sourceHandle: "out", target: "gc_down", targetHandle: "a" },
         { id: "gc_e6", source: "gc_slow", sourceHandle: "out", target: "gc_down", targetHandle: "b" },
-        { id: "gc_e7", source: "gc_up", sourceHandle: "out", target: "gc_buy", targetHandle: "condition" },
-        { id: "gc_e8", source: "gc_down", sourceHandle: "out", target: "gc_sell", targetHandle: "condition" },
+        { id: "gc_e7", source: "gc_rsi", sourceHandle: "out", target: "gc_not_overbought", targetHandle: "a" },
+        { id: "gc_e8", source: "gc_c70", sourceHandle: "out", target: "gc_not_overbought", targetHandle: "b" },
+        { id: "gc_e9", source: "gc_rsi", sourceHandle: "out", target: "gc_not_oversold", targetHandle: "a" },
+        { id: "gc_e10", source: "gc_c30", sourceHandle: "out", target: "gc_not_oversold", targetHandle: "b" },
+        { id: "gc_e11", source: "gc_up", sourceHandle: "out", target: "gc_and_buy", targetHandle: "a" },
+        { id: "gc_e12", source: "gc_not_overbought", sourceHandle: "out", target: "gc_and_buy", targetHandle: "b" },
+        { id: "gc_e13", source: "gc_down", sourceHandle: "out", target: "gc_and_sell", targetHandle: "a" },
+        { id: "gc_e14", source: "gc_not_oversold", sourceHandle: "out", target: "gc_and_sell", targetHandle: "b" },
+        { id: "gc_e15", source: "gc_and_buy", sourceHandle: "out", target: "gc_buy", targetHandle: "condition" },
+        { id: "gc_e16", source: "gc_and_sell", sourceHandle: "out", target: "gc_sell", targetHandle: "condition" },
       ],
     },
   },

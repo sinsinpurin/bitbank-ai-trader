@@ -4,12 +4,14 @@ import {
   DEFAULT_CANDLE_TIMEFRAME,
   isCandleTimeframe,
   parseGraph,
+  type BacktestRequest,
   type CandleTimeframe,
   type Strategy,
   type StrategyGraph,
 } from "@noctas/shared";
 import { prisma } from "../db/prisma";
 import { reloadActiveStrategies } from "./botEngine";
+import { runBacktest } from "./backtestEngine";
 import { broadcast } from "../ws/relay";
 import { generateStrategyFromPrompt } from "../ai/strategyGenerator";
 import { getAnthropicApiKey } from "../ai/anthropicClient";
@@ -171,6 +173,34 @@ export async function strategyRoutes(app: FastifyInstance) {
       }
     }
   );
+
+  // 保存前(未保存でも可)のグラフを、サーバーが保持している過去ローソク足履歴に対して
+  // ウォークフォワードで再生する読み取り専用のバックテスト。DBへの書き込みは一切行わない
+  app.post<{ Body: BacktestRequest }>("/api/strategies/backtest", async (request, reply) => {
+    const { graph, pair, timeframe } = request.body ?? ({} as BacktestRequest);
+    if (!validateGraph(graph)) {
+      return reply.status(400).send({ error: "graph (nodes/edges) は必須です" });
+    }
+    if (!pair || !isValidPair(pair)) {
+      return reply.status(400).send({ error: `未対応のペアです: ${pair}` });
+    }
+    if (!timeframe || !isCandleTimeframe(timeframe)) {
+      return reply.status(400).send({ error: `未対応の時間足です: ${timeframe}` });
+    }
+    const riskError = validateRiskSettings(request.body ?? {});
+    if (riskError) {
+      return reply.status(400).send({ error: riskError });
+    }
+
+    try {
+      return runBacktest({ ...request.body, graph, pair, timeframe });
+    } catch (err) {
+      request.log.error(err, "バックテストの実行に失敗しました");
+      return reply.status(500).send({
+        error: err instanceof Error ? err.message : "バックテストの実行に失敗しました",
+      });
+    }
+  });
 
   app.post<{ Body: StrategyBody }>("/api/strategies", async (request, reply) => {
     const { name, pair, timeframe, description, graph } = request.body ?? {};

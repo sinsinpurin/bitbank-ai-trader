@@ -1,4 +1,11 @@
-import type { CandleTimeframe, GeneratedStrategy, Strategy, StrategyGraph } from "@noctas/shared";
+import type {
+  BacktestRequest,
+  BacktestSummary,
+  CandleTimeframe,
+  GeneratedStrategy,
+  Strategy,
+  StrategyGraph,
+} from "@noctas/shared";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -86,5 +93,16 @@ export async function fetchStrategyOpenPositions(id: string): Promise<StrategyOp
 export async function deleteStrategy(id: string): Promise<void> {
   await handle<{ ok: boolean }>(
     await fetch(`${API_URL}/api/strategies/${id}`, { method: "DELETE" })
+  );
+}
+
+/** キャンバス上のグラフ(保存前でも可)をサーバーの過去ローソク足履歴でバックテストする(読み取り専用) */
+export async function runBacktest(input: BacktestRequest): Promise<BacktestSummary> {
+  return handle(
+    await fetch(`${API_URL}/api/strategies/backtest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    })
   );
 }
