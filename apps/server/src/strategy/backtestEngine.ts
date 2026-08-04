@@ -45,6 +45,8 @@ function emptySummary(candleCount: number, warnings: string[]): BacktestSummary 
     profitFactor: null,
     maxDrawdown: 0,
     totalFeesJpy: 0,
+    grossPnlJpy: 0,
+    feeLossCount: 0,
     equityCurve: [],
     trades: [],
   };
@@ -160,6 +162,8 @@ export function runBacktest(request: BacktestRequest): BacktestSummary {
   let grossProfit = 0;
   let grossLoss = 0;
   let totalFeesJpy = 0;
+  let grossPnlJpy = 0;
+  let feeLossCount = 0;
   let peak = 0;
   let maxDrawdown = 0;
   const seenErrors = new Set<string>();
@@ -168,6 +172,11 @@ export function runBacktest(request: BacktestRequest): BacktestSummary {
     trades.push(trade);
     realizedPnl += trade.pnl;
     totalFeesJpy += trade.totalFeeJpy;
+    const grossPnl = trade.pnl + trade.totalFeeJpy;
+    grossPnlJpy += grossPnl;
+    if (grossPnl > 0 && trade.pnl <= 0) {
+      feeLossCount += 1;
+    }
     if (trade.pnl >= 0) {
       winCount += 1;
       grossProfit += trade.pnl;
@@ -241,6 +250,8 @@ export function runBacktest(request: BacktestRequest): BacktestSummary {
     profitFactor: grossLoss > 0 ? grossProfit / grossLoss : null,
     maxDrawdown,
     totalFeesJpy,
+    grossPnlJpy,
+    feeLossCount,
     equityCurve,
     trades,
   };

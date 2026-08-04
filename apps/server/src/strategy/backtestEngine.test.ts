@@ -89,6 +89,32 @@ function buyOnlyOscillatingGraph(): StrategyGraph {
   };
 }
 
+/**
+ * price > 100 で買い、price > 100.1 で売る(sellノードの閾値がbuyより少しだけ高い)グラフ。
+ * 買い→売りの間の値動きが小さいシナリオ(方向は合っているが往復手数料を下回る値幅)を作るための専用グラフ。
+ */
+function buyThenSmallFavorableExitGraph(): StrategyGraph {
+  return {
+    nodes: [
+      { id: "price", type: "price", params: {}, position: { x: 0, y: 0 } },
+      { id: "constBuy", type: "constant", params: { value: 100 }, position: { x: 0, y: 0 } },
+      { id: "gtBuy", type: "compare", params: { op: "gt" }, position: { x: 0, y: 0 } },
+      { id: "buy1", type: "buy", params: {}, position: { x: 0, y: 0 } },
+      { id: "constSell", type: "constant", params: { value: 100.1 }, position: { x: 0, y: 0 } },
+      { id: "gtSell", type: "compare", params: { op: "gt" }, position: { x: 0, y: 0 } },
+      { id: "sell1", type: "sell", params: {}, position: { x: 0, y: 0 } },
+    ],
+    edges: [
+      { id: "e1", source: "price", target: "gtBuy", targetHandle: "a" },
+      { id: "e2", source: "constBuy", target: "gtBuy", targetHandle: "b" },
+      { id: "e3", source: "gtBuy", target: "buy1", targetHandle: "condition" },
+      { id: "e4", source: "price", target: "gtSell", targetHandle: "a" },
+      { id: "e5", source: "constSell", target: "gtSell", targetHandle: "b" },
+      { id: "e6", source: "gtSell", target: "sell1", targetHandle: "condition" },
+    ],
+  };
+}
+
 function baseRequest(overrides: Partial<BacktestRequest> = {}): BacktestRequest {
   return {
     graph: compareThresholdGraph(),
@@ -262,6 +288,76 @@ describe("runBacktest / ai_judgment nodes never fire and surface a warning", () 
     const result = runBacktest(baseRequest({ graph }));
     expect(result.trades).toHaveLength(0);
     expect(result.warnings.some((w) => w.includes("AI Judgment"))).toBe(true);
+  });
+});
+
+describe("runBacktest / fee-loss detection (direction correct, fees erase the profit)", () => {
+  it("counts a trade where price moved in the trade's favor but net pnl is <= 0 due to fees as a feeLossCount", () => {
+    getCandlesForTimeframe.mockReturnValue([
+      candle(0, 90), // buy/sell conditions both false
+      candle(60, 100.01), // buy edge fires (90 -> 100.01 crosses above 100)
+      candle(120, 100.16), // sell edge fires (100.01 -> 100.16 crosses above 100.1); price kept moving in the buy's favor
+    ]);
+
+    const result = runBacktest(
+      baseRequest({
+        graph: buyThenSmallFavorableExitGraph(),
+        positionSizeJpy: 10_000,
+        // disable SL/TP/trailing so only the strategy's own sell condition closes the position
+        stopLossPct: 100,
+        takeProfitPct: 0,
+        trailingStopPct: null,
+      })
+    );
+
+    expect(result.trades).toHaveLength(1);
+    const trade = result.trades[0];
+    expect(trade.closeReason).toBe("bot_strategy");
+
+    const slip = config.fees.slippagePct / 100;
+    const feePct = config.fees.takerFeePct / 100;
+    const buyExecPrice = 100.01 * (1 + slip);
+    const amount = 10_000 / buyExecPrice;
+    const entryFee = 10_000 * feePct;
+    const sellExecPrice = 100.16 * (1 - slip);
+    const proceeds = sellExecPrice * amount;
+    const exitFee = proceeds * feePct;
+    const grossPnl = (sellExecPrice - buyExecPrice) * amount;
+    const netPnl = grossPnl - entryFee - exitFee;
+
+    // このシナリオ自体の前提を確認する: 値動きの方向は建玉に有利(gross > 0)だが、
+    // 往復手数料(~0.28%)が値幅(~0.15%)を上回るため、手数料込みの純損益は0以下になる
+    expect(grossPnl).toBeGreaterThan(0);
+    expect(netPnl).toBeLessThanOrEqual(0);
+
+    expect(trade.pnl).toBeCloseTo(netPnl, 6);
+    expect(result.grossPnlJpy).toBeCloseTo(grossPnl, 6);
+    expect(result.feeLossCount).toBe(1);
+  });
+
+  it("does not count a trade as a fee-loss when the direction itself was wrong", () => {
+    // 既存の「素直に逆方向に負けた」ラウンドトリップ(100 -> 105 -> 95)を再利用する。
+    // 値動きの方向自体が建玉と逆なので、lossCountには入るがfeeLossCountには入らないはず
+    getCandlesForTimeframe.mockReturnValue([
+      candle(0, 100),
+      candle(60, 100),
+      candle(120, 105),
+      candle(180, 105),
+      candle(240, 95),
+      candle(300, 95),
+    ]);
+    const result = runBacktest(
+      baseRequest({
+        positionSizeJpy: 10_000,
+        stopLossPct: 100,
+        takeProfitPct: 0,
+        trailingStopPct: null,
+      })
+    );
+    expect(result.trades).toHaveLength(1);
+    expect(result.lossCount).toBe(1);
+    expect(result.feeLossCount).toBe(0);
+    expect(result.grossPnlJpy).toBeLessThan(0);
   });
 });
 

@@ -282,6 +282,10 @@ export interface BacktestSummary {
   profitFactor: number | null;
   maxDrawdown: number;
   totalFeesJpy: number;
+  /** 手数料控除前の合計損益(円)。各トレードのpnl + totalFeeJpyの合計 */
+  grossPnlJpy: number;
+  /** 値動きの方向は合っていた(grossPnlがプラス)のに、手数料込みの純pnlが0以下になったトレード件数 */
+  feeLossCount: number;
   equityCurve: PnlCurvePoint[];
   trades: BacktestTrade[];
 }

@@ -120,7 +120,7 @@ export function BacktestPanel({ graph, pair, timeframe, riskForm, maxPositionJpy
 
       {summary && (
         <Stack gap={4}>
-          <SimpleGrid columns={{ base: 2, md: 3, xl: 6 }} gap={3}>
+          <SimpleGrid columns={{ base: 2, md: 4, xl: 8 }} gap={3}>
             <Tile
               label="Realized P&L"
               value={formatSignedJpy(summary.realizedPnl)}
@@ -142,6 +142,18 @@ export function BacktestPanel({ graph, pair, timeframe, riskForm, maxPositionJpy
             />
             <Tile label="Max Drawdown" value={formatJpy(summary.maxDrawdown)} />
             <Tile label="Fees Paid" value={formatJpy(summary.totalFeesJpy)} />
+            <Tile
+              label="値幅合計(手数料前)"
+              value={formatSignedJpy(summary.grossPnlJpy)}
+              valueColor={pnlColor(summary.grossPnlJpy)}
+              sub="手数料を引く前の合計損益"
+            />
+            <Tile
+              label="手数料負け"
+              value={`${summary.feeLossCount}件`}
+              valueColor={summary.feeLossCount > 0 ? "signal.orange" : "#F2F2F5"}
+              sub="方向は合っていたが手数料で純損失"
+            />
           </SimpleGrid>
 
           <EquityCurveChart points={summary.equityCurve} />
