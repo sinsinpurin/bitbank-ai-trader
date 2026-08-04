@@ -10,6 +10,11 @@ export interface MarketSnapshot {
   low24h: number;
   vol24h: number;
   recentPrices: number[]; // 直近の価格推移(古い順)
+  indicators: {
+    sma5: number | null;
+    sma20: number | null;
+    rsi14: number | null;
+  };
 }
 
 export interface AiDecisionResult {
@@ -70,6 +75,9 @@ export async function getAiDecision(
 24時間安値: ${snapshot.low24h}
 24時間出来高: ${snapshot.vol24h}
 直近価格推移(古い順): ${snapshot.recentPrices.join(", ")}
+SMA(5): ${snapshot.indicators.sma5?.toFixed(2) ?? "データ不足のため算出不可"}
+SMA(20): ${snapshot.indicators.sma20?.toFixed(2) ?? "データ不足のため算出不可"}
+RSI(14): ${snapshot.indicators.rsi14?.toFixed(2) ?? "データ不足のため算出不可"}
 
 submit_trading_decision ツールで結果を返してください。`,
       },

@@ -40,6 +40,13 @@ export function ema(values: number[], period: number): number[] {
   return result;
 }
 
+/** 数値シリーズの最新値を返す。NaN、または空配列の場合はnull(履歴不足を表す) */
+export function latestValue(series: number[]): number | null {
+  if (series.length === 0) return null;
+  const last = series[series.length - 1];
+  return Number.isNaN(last) ? null : last;
+}
+
 /** Wilder方式のRSI(0-100) */
 export function rsi(values: number[], period: number): number[] {
   const result = new Array<number>(values.length).fill(NaN);

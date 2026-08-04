@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { rsi, sma } from "@noctas/shared";
 import type { MarketSnapshot } from "./claudeService";
 
 // This is a regression test for a real bug: refreshPair used to hardcode
@@ -79,5 +80,60 @@ describe("aiJudgment / vol24h in the Claude snapshot", () => {
 
     const snapshot = getAiDecision.mock.calls[0][0] as MarketSnapshot;
     expect(snapshot.vol24h).toBe(0);
+  });
+});
+
+describe("aiJudgment / indicators in the Claude snapshot", () => {
+  it("reports null for every indicator until there's enough price history", async () => {
+    setWatchedPairs(new Set(["ltc_jpy"]));
+    // Fewer than 5 ticks: sma5/sma20/rsi14 all need more history than this.
+    recordPrice("ltc_jpy", 100);
+    recordPrice("ltc_jpy", 101);
+    recordPrice("ltc_jpy", 102);
+
+    const stop = startAiJudgmentLoop();
+    await vi.advanceTimersByTimeAsync(config.ai.pollIntervalMs);
+    stop();
+
+    const snapshot = getAiDecision.mock.calls[0][0] as MarketSnapshot;
+    expect(snapshot.indicators).toEqual({ sma5: null, sma20: null, rsi14: null });
+  });
+
+  it("fills sma5 once 5 ticks are recorded, while sma20/rsi14 stay null", async () => {
+    setWatchedPairs(new Set(["etc_jpy"]));
+    const prices = [100, 101, 99, 102, 103];
+    for (const p of prices) recordPrice("etc_jpy", p);
+
+    const stop = startAiJudgmentLoop();
+    await vi.advanceTimersByTimeAsync(config.ai.pollIntervalMs);
+    stop();
+
+    const snapshot = getAiDecision.mock.calls[0][0] as MarketSnapshot;
+    expect(snapshot.indicators.sma5).toBeCloseTo((100 + 101 + 99 + 102 + 103) / 5);
+    expect(snapshot.indicators.sma20).toBeNull();
+    expect(snapshot.indicators.rsi14).toBeNull();
+  });
+
+  it("computes sma5/sma20/rsi14 matching the shared indicator functions once fully warmed up", async () => {
+    setWatchedPairs(new Set(["mona_jpy"]));
+    // 20 ticks: enough for sma20 (needs >=20) and rsi14 (needs >=15, i.e. >period).
+    const prices = [
+      100, 102, 101, 103, 105, 104, 106, 108, 107, 109, 110, 108, 111, 113, 112, 114, 115, 113,
+      116, 118,
+    ];
+    for (const p of prices) recordPrice("mona_jpy", p);
+
+    const stop = startAiJudgmentLoop();
+    await vi.advanceTimersByTimeAsync(config.ai.pollIntervalMs);
+    stop();
+
+    const snapshot = getAiDecision.mock.calls[0][0] as MarketSnapshot;
+    const expectedSma5 = sma(prices, 5).at(-1)!;
+    const expectedSma20 = sma(prices, 20).at(-1)!;
+    const expectedRsi14 = rsi(prices, 14).at(-1)!;
+
+    expect(snapshot.indicators.sma5).toBeCloseTo(expectedSma5);
+    expect(snapshot.indicators.sma20).toBeCloseTo(expectedSma20);
+    expect(snapshot.indicators.rsi14).toBeCloseTo(expectedRsi14);
   });
 });

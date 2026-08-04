@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ema, rsi, sma } from "./indicators";
+import { ema, latestValue, rsi, sma } from "./indicators";
 
 describe("sma", () => {
   it("fills NaN until enough history, then averages the trailing window", () => {
@@ -56,5 +56,19 @@ describe("rsi", () => {
   it("returns all-NaN when the series isn't longer than the period", () => {
     const result = rsi([1, 2, 3], 14);
     expect(result.every((v) => Number.isNaN(v))).toBe(true);
+  });
+});
+
+describe("latestValue", () => {
+  it("returns null when the last element is NaN", () => {
+    expect(latestValue(sma([1, 2], 3))).toBeNull();
+  });
+
+  it("returns the last element when it's a real number", () => {
+    expect(latestValue(sma([1, 2, 3, 4, 5], 3))).toBeCloseTo((3 + 4 + 5) / 3);
+  });
+
+  it("returns null for an empty array", () => {
+    expect(latestValue([])).toBeNull();
   });
 });
