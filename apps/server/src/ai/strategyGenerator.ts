@@ -21,6 +21,7 @@ const NODE_SPEC: Record<
   { inputs: Record<string, "number" | "bool">; output: "number" | "bool" | null }
 > = {
   price: { inputs: {}, output: "number" },
+  volume: { inputs: {}, output: "number" },
   constant: { inputs: {}, output: "number" },
   position: { inputs: {}, output: "bool" },
   sma: { inputs: { in: "number" }, output: "number" },
@@ -54,6 +55,10 @@ const buildSystemPrompt = (pair: string, timeframe: CandleTimeframe) => `あな�
 値には2種類ある: number(数値シリーズ) / bool(真偽シリーズ)。ポートの型が一致する接続のみ有効。
 
 - price: 入力なし → 出力 out(number)。${pairLabel(pair)}の終値(${timeframeLabel(timeframe)})
+- volume: 入力なし → 出力 out(number)。その足の出来高(${timeframeLabel(timeframe)})。
+  sma/emaと組み合わせて「出来高移動平均」を、cross/compareと組み合わせて「出来高スパイク検知」
+  (例: 出来高がその移動平均を上抜けた瞬間だけ真)を作れる。専用の出来高系ノードは無いので、
+  出来高を使った条件は必ずこのノードから既存の汎用ノードを組み合わせて構成すること。
 - constant: 入力なし → 出力 out(number)。params.value に固定値(RSIしきい値など)
 - position: 入力なし → 出力 out(bool)。この戦略が${pairLabel(pair)}で未決済の建玉を持っているかを表す。
   params.state = "none"(建玉なしのとき真, 既定)|"holding"(建玉ありのとき真)。
@@ -250,14 +255,19 @@ function validateGraph(graph: StrategyGraph): string[] {
   }
 
   if (errors.length === 0) {
-    // 合成した終値シリーズで実際に評価し、循環参照などの実行時エラーを検出する
+    // 合成した終値・出来高シリーズで実際に評価し、循環参照などの実行時エラーを検出する。
+    // volumesには意図的なスパイクを混ぜておく(単調・一定値だとvolumeノードを使ったグラフの
+    // cross/compare条件が一度も成立せず、実質未検証のまま素通りしてしまうため)。
     const closes: number[] = [];
+    const volumes: number[] = [];
     let price = 10_000_000;
     for (let i = 0; i < 300; i++) {
       price *= 1 + Math.sin(i / 7) * 0.001;
       closes.push(price);
+      const isSpike = i % 50 === 25;
+      volumes.push(isSpike ? 50 : 10);
     }
-    errors.push(...evaluateGraph(graph, closes).errors);
+    errors.push(...evaluateGraph(graph, closes, { volumes }).errors);
   }
 
   return errors;

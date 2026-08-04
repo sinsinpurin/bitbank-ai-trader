@@ -26,6 +26,55 @@ describe("evaluateGraph / price node", () => {
   });
 });
 
+describe("evaluateGraph / volume node", () => {
+  it("passes options.volumes through unchanged when its length matches closes", () => {
+    const graph: StrategyGraph = { nodes: [node("v", "volume")], edges: [] };
+    const result = evaluateGraph(graph, [1, 2, 3], { collectValues: true, volumes: [10, 20, 30] });
+    expect(result.nodeValues.v).toBe(30);
+    expect(result.errors).toEqual([]);
+  });
+
+  it("falls back to NaN (unset) when volumes is not supplied", () => {
+    const graph: StrategyGraph = { nodes: [node("v", "volume")], edges: [] };
+    const result = evaluateGraph(graph, [1, 2, 3], { collectValues: true });
+    expect(result.nodeValues.v).toBeNull();
+  });
+
+  it("falls back to NaN (unset) when volumes length does not match closes", () => {
+    const graph: StrategyGraph = { nodes: [node("v", "volume")], edges: [] };
+    const result = evaluateGraph(graph, [1, 2, 3], { collectValues: true, volumes: [10, 20] });
+    expect(result.nodeValues.v).toBeNull();
+  });
+
+  it("integration: buys only at the exact tick volume spikes above its own moving average", () => {
+    // volume stays flat around 100, then spikes to 500 on the last tick
+    const closes = [10, 10, 10, 10, 10, 10];
+    const volumes = [100, 100, 100, 100, 100, 500];
+    const graph: StrategyGraph = {
+      nodes: [
+        node("vol", "volume"),
+        node("volSma", "sma", { period: 3 }),
+        node("volSpike", "cross", { op: "cross_above" }),
+        node("buy1", "buy"),
+      ],
+      edges: [
+        edge("vol", "volSpike", "a"),
+        edge("vol", "volSma", "in"),
+        edge("volSma", "volSpike", "b"),
+        edge("volSpike", "buy1", "condition"),
+      ],
+    };
+
+    // no spike yet -> never crosses above its own SMA
+    const flatResult = evaluateGraph(graph, closes.slice(0, 5), { volumes: volumes.slice(0, 5) });
+    expect(flatResult.buy.current).toBe(false);
+
+    // spike tick -> volume crosses above its trailing SMA exactly now
+    const spikeResult = evaluateGraph(graph, closes, { volumes });
+    expect(spikeResult.buy).toEqual({ current: true, previous: false });
+  });
+});
+
 describe("evaluateGraph / compare node", () => {
   function buildGraph(op: "gt" | "lt" | "gte" | "lte", value: number): StrategyGraph {
     return {

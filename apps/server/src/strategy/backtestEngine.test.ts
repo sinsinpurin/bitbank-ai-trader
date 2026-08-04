@@ -361,6 +361,82 @@ describe("runBacktest / fee-loss detection (direction correct, fees erase the pr
   });
 });
 
+describe("runBacktest / volume node", () => {
+  /**
+   * volume -> sma(period 3, fed by volume) -> cross(a=volume, b=volSma) -> buy/sell.
+   * Price stays flat at 100 the whole time so any trade timing is driven purely by the
+   * volume spike, not by price crossing anything.
+   */
+  function volumeSpikeGraph(): StrategyGraph {
+    return {
+      nodes: [
+        { id: "vol", type: "volume", params: {}, position: { x: 0, y: 0 } },
+        { id: "volSma", type: "sma", params: { period: 3 }, position: { x: 0, y: 0 } },
+        { id: "spikeUp", type: "cross", params: { op: "cross_above" }, position: { x: 0, y: 0 } },
+        { id: "spikeDown", type: "cross", params: { op: "cross_below" }, position: { x: 0, y: 0 } },
+        { id: "buy1", type: "buy", params: {}, position: { x: 0, y: 0 } },
+        { id: "sell1", type: "sell", params: {}, position: { x: 0, y: 0 } },
+      ],
+      edges: [
+        { id: "e1", source: "vol", target: "volSma", targetHandle: "in" },
+        { id: "e2", source: "vol", target: "spikeUp", targetHandle: "a" },
+        { id: "e3", source: "volSma", target: "spikeUp", targetHandle: "b" },
+        { id: "e4", source: "vol", target: "spikeDown", targetHandle: "a" },
+        { id: "e5", source: "volSma", target: "spikeDown", targetHandle: "b" },
+        { id: "e6", source: "spikeUp", target: "buy1", targetHandle: "condition" },
+        { id: "e7", source: "spikeDown", target: "sell1", targetHandle: "condition" },
+      ],
+    };
+  }
+
+  it("only trades at the exact tick volume spikes above (buy) and then reverts below (sell) its own moving average", () => {
+    getCandlesForTimeframe.mockReturnValue([
+      candle(0, 100, { volume: 10 }),
+      candle(60, 100, { volume: 10 }),
+      candle(120, 100, { volume: 10 }),
+      candle(180, 100, { volume: 50 }), // spike: volume crosses above sma(3)=10 -> buy edge
+      candle(240, 100, { volume: 10 }), // reverts: volume crosses below sma(3)=23.33 -> sell edge
+    ]);
+
+    const result = runBacktest(
+      baseRequest({
+        graph: volumeSpikeGraph(),
+        positionSizeJpy: 10_000,
+        stopLossPct: 100,
+        takeProfitPct: 0,
+        trailingStopPct: null,
+      })
+    );
+
+    expect(result.trades).toHaveLength(1);
+    expect(result.trades[0].openedAt).toBe(180_000);
+    expect(result.trades[0].closedAt).toBe(240_000);
+    expect(result.trades[0].closeReason).toBe("bot_strategy");
+  });
+
+  it("never trades when volume stays flat (no spike to cross the moving average)", () => {
+    getCandlesForTimeframe.mockReturnValue([
+      candle(0, 100, { volume: 10 }),
+      candle(60, 100, { volume: 10 }),
+      candle(120, 100, { volume: 10 }),
+      candle(180, 100, { volume: 10 }),
+      candle(240, 100, { volume: 10 }),
+    ]);
+
+    const result = runBacktest(
+      baseRequest({
+        graph: volumeSpikeGraph(),
+        positionSizeJpy: 10_000,
+        stopLossPct: 100,
+        takeProfitPct: 0,
+        trailingStopPct: null,
+      })
+    );
+
+    expect(result.trades).toHaveLength(0);
+  });
+});
+
 describe("runBacktest / maxOpenPositions caps concurrent simulated positions", () => {
   it("blocks a second buy edge while at the cap, so a later take-profit only closes the one allowed position", () => {
     getCandlesForTimeframe.mockReturnValue([

@@ -80,6 +80,11 @@ export interface EvaluateOptions {
    * 未指定の場合はfalse(建玉なし)として扱う。
    */
   hasOpenPosition?: boolean;
+  /**
+   * volumeノード用。closesと同じ長さの出来高シリーズ。未指定または長さ不一致の場合、
+   * volumeノードは常にNaN(未計算)を返す。
+   */
+  volumes?: number[];
 }
 
 export function evaluateGraph(
@@ -126,6 +131,14 @@ export function evaluateGraph(
       case "price":
         result = closes;
         break;
+
+      case "volume": {
+        result =
+          options.volumes && options.volumes.length === length
+            ? options.volumes
+            : new Array<number>(length).fill(NaN);
+        break;
+      }
 
       case "constant": {
         const value = numberParam(node, "value", 0);
