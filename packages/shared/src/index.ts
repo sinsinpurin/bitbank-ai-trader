@@ -236,6 +236,57 @@ export interface BotSignal {
 }
 
 // ---------------------------------------------------------------------------
+// バックテスト(保存前のグラフを過去ローソク足でウォークフォワード再生する読み取り専用シミュレーション)
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /api/strategies/backtest のリクエストボディ。エディタのキャンバス上のグラフをそのまま渡せる
+ * (保存前でも実行可能。DBへの書き込みは一切発生しない)。リスク設定はStrategyRiskSettingsと同じ
+ * フィールド名で、未指定(undefined)またはnullはサーバーのグローバル設定にフォールバックする。
+ */
+export interface BacktestRequest extends Partial<StrategyRiskSettings> {
+  graph: StrategyGraph;
+  pair: Pair;
+  timeframe: CandleTimeframe;
+}
+
+/** バックテストで仮想的に建てて決済した1回分の取引。ClosedPositionRecordに近い形にしている */
+export interface BacktestTrade {
+  side: OrderSide;
+  entryPrice: number;
+  amount: number;
+  /** 建玉した足のtime(エポックms) */
+  openedAt: number;
+  /** 決済した足のtime(エポックms) */
+  closedAt: number;
+  closePrice: number;
+  /** 手数料控除済みの実現損益(円) */
+  pnl: number;
+  closeReason: TradeReason;
+  /** 建玉+決済の合計手数料(円、シミュレーション値) */
+  totalFeeJpy: number;
+}
+
+/** POST /api/strategies/backtest のレスポンス。フィールド名はPnlSummaryとなるべく揃えている */
+export interface BacktestSummary {
+  /** シミュレーションに使ったローソク足の本数(CANDLE_SEED_DAYS日分が上限) */
+  candleCount: number;
+  /** 簡略化・再現不可能な点についての注意文言(例: ai_judgmentノードは常に不成立扱い) */
+  warnings: string[];
+  realizedPnl: number;
+  winCount: number;
+  lossCount: number;
+  winRate: number | null;
+  avgWin: number | null;
+  avgLoss: number | null;
+  profitFactor: number | null;
+  maxDrawdown: number;
+  totalFeesJpy: number;
+  equityCurve: PnlCurvePoint[];
+  trades: BacktestTrade[];
+}
+
+// ---------------------------------------------------------------------------
 // アプリ設定・AI使用量
 // ---------------------------------------------------------------------------
 

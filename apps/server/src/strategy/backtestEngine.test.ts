@@ -1,0 +1,292 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { BacktestRequest, StrategyGraph } from "@noctas/shared";
+import { config } from "../config";
+import type { CandleBucket } from "./botEngine";
+
+// backtestEngine.ts pulls in strategy/botEngine.ts only for getCandlesForTimeframe(); replace it
+// with a controllable stub so tests don't depend on the live candle buffer / bitbank REST seeding.
+const getCandlesForTimeframe = vi.fn<(pair: string, timeframe: string) => CandleBucket[]>();
+vi.mock("./botEngine", () => ({
+  getCandlesForTimeframe: (...args: [string, string]) => getCandlesForTimeframe(...args),
+}));
+
+// resolveExitReason (trading/riskManager.ts) and executionPrice/feeOf (trading/paperTradingEngine.ts)
+// are imported for real (they're pure, config-only functions) so this test doubles as verification
+// that the backtest reuses - rather than reimplements - the live fee/slippage/exit-priority logic.
+// Their modules still import ../db/prisma at the top level, so it's mocked here purely to avoid
+// constructing a real PrismaClient during the test run (matches the pattern in riskManager.test.ts).
+vi.mock("../db/prisma", () => ({ prisma: {} }));
+
+const { runBacktest } = await import("./backtestEngine");
+
+function candle(time: number, close: number, overrides: Partial<CandleBucket> = {}): CandleBucket {
+  return {
+    time,
+    open: overrides.open ?? close,
+    high: overrides.high ?? close,
+    low: overrides.low ?? close,
+    close,
+    volume: overrides.volume ?? 0,
+  };
+}
+
+/** price > 100 で買い、price < 100 で売る単純な比較ノード戦略(SMAクロスの代わりに決定的な数値で検証する) */
+function compareThresholdGraph(): StrategyGraph {
+  return {
+    nodes: [
+      { id: "price", type: "price", params: {}, position: { x: 0, y: 0 } },
+      { id: "const100", type: "constant", params: { value: 100 }, position: { x: 0, y: 0 } },
+      { id: "gt100", type: "compare", params: { op: "gt" }, position: { x: 0, y: 0 } },
+      { id: "lt100", type: "compare", params: { op: "lt" }, position: { x: 0, y: 0 } },
+      { id: "buy1", type: "buy", params: {}, position: { x: 0, y: 0 } },
+      { id: "sell1", type: "sell", params: {}, position: { x: 0, y: 0 } },
+    ],
+    edges: [
+      { id: "e1", source: "price", target: "gt100", targetHandle: "a" },
+      { id: "e2", source: "const100", target: "gt100", targetHandle: "b" },
+      { id: "e3", source: "price", target: "lt100", targetHandle: "a" },
+      { id: "e4", source: "const100", target: "lt100", targetHandle: "b" },
+      { id: "e5", source: "gt100", target: "buy1", targetHandle: "condition" },
+      { id: "e6", source: "lt100", target: "sell1", targetHandle: "condition" },
+    ],
+  };
+}
+
+/**
+ * price > 50 で一度だけ買う(buyのみ、sellノード無し)グラフ。SL/TP/トレーリングの単体検証用。
+ * 最初の足だけ条件を偽にしておくことで、2本目で確実に立ち上がりエッジ(買い)が発生する。
+ */
+function buyOnceGraph(): StrategyGraph {
+  return {
+    nodes: [
+      { id: "price", type: "price", params: {}, position: { x: 0, y: 0 } },
+      { id: "const50", type: "constant", params: { value: 50 }, position: { x: 0, y: 0 } },
+      { id: "gt50", type: "compare", params: { op: "gt" }, position: { x: 0, y: 0 } },
+      { id: "buy1", type: "buy", params: {}, position: { x: 0, y: 0 } },
+    ],
+    edges: [
+      { id: "e1", source: "price", target: "gt50", targetHandle: "a" },
+      { id: "e2", source: "const50", target: "gt50", targetHandle: "b" },
+      { id: "e3", source: "gt50", target: "buy1", targetHandle: "condition" },
+    ],
+  };
+}
+
+/** price > 100 で買う(sellノード無し)、価格が上下に振動するとその都度立ち上がりエッジで買おうとするグラフ */
+function buyOnlyOscillatingGraph(): StrategyGraph {
+  return {
+    nodes: [
+      { id: "price", type: "price", params: {}, position: { x: 0, y: 0 } },
+      { id: "const100", type: "constant", params: { value: 100 }, position: { x: 0, y: 0 } },
+      { id: "gt100", type: "compare", params: { op: "gt" }, position: { x: 0, y: 0 } },
+      { id: "buy1", type: "buy", params: {}, position: { x: 0, y: 0 } },
+    ],
+    edges: [
+      { id: "e1", source: "price", target: "gt100", targetHandle: "a" },
+      { id: "e2", source: "const100", target: "gt100", targetHandle: "b" },
+      { id: "e3", source: "gt100", target: "buy1", targetHandle: "condition" },
+    ],
+  };
+}
+
+function baseRequest(overrides: Partial<BacktestRequest> = {}): BacktestRequest {
+  return {
+    graph: compareThresholdGraph(),
+    pair: "btc_jpy",
+    timeframe: "1min",
+    ...overrides,
+  };
+}
+
+beforeEach(() => {
+  getCandlesForTimeframe.mockReset();
+});
+
+describe("runBacktest / insufficient data", () => {
+  it("returns an empty summary with a warning when there are fewer than 2 candles", () => {
+    getCandlesForTimeframe.mockReturnValue([candle(0, 100)]);
+    const result = runBacktest(baseRequest());
+    expect(result.candleCount).toBe(1);
+    expect(result.trades).toEqual([]);
+    expect(result.equityCurve).toEqual([]);
+    expect(result.warnings.some((w) => w.includes("最低2本"))).toBe(true);
+  });
+
+  it("returns an empty summary for zero candles", () => {
+    getCandlesForTimeframe.mockReturnValue([]);
+    const result = runBacktest(baseRequest());
+    expect(result.candleCount).toBe(0);
+    expect(result.trades).toEqual([]);
+  });
+});
+
+describe("runBacktest / buy-sell round trip matches paperTradingEngine's fee & slippage formulas", () => {
+  it("opens on the rising edge of the buy condition and closes on the falling edge of the sell condition", () => {
+    getCandlesForTimeframe.mockReturnValue([
+      candle(0, 100),
+      candle(60, 100),
+      candle(120, 105), // buy edge fires here (100 -> 105, crosses above the compare threshold)
+      candle(180, 105), // no new edge
+      candle(240, 95), // sell edge fires here (105 -> 95, crosses below)
+      candle(300, 95),
+    ]);
+
+    const result = runBacktest(
+      baseRequest({
+        positionSizeJpy: 10_000,
+        // disable SL/TP/trailing so only the strategy's own sell condition closes the position
+        stopLossPct: 100,
+        takeProfitPct: 0,
+        trailingStopPct: null,
+      })
+    );
+
+    expect(result.trades).toHaveLength(1);
+    const trade = result.trades[0];
+    expect(trade.closeReason).toBe("bot_strategy");
+    expect(trade.openedAt).toBe(120_000);
+    expect(trade.closedAt).toBe(240_000);
+
+    const slip = config.fees.slippagePct / 100;
+    const feePct = config.fees.takerFeePct / 100;
+    const buyExecPrice = 105 * (1 + slip);
+    const amount = 10_000 / buyExecPrice;
+    const entryFee = 10_000 * feePct;
+    const sellExecPrice = 95 * (1 - slip);
+    const proceeds = sellExecPrice * amount;
+    const exitFee = proceeds * feePct;
+    const expectedPnl = (sellExecPrice - buyExecPrice) * amount - entryFee - exitFee;
+
+    expect(trade.entryPrice).toBeCloseTo(buyExecPrice, 8);
+    expect(trade.amount).toBeCloseTo(amount, 8);
+    expect(trade.closePrice).toBeCloseTo(sellExecPrice, 8);
+    expect(trade.pnl).toBeCloseTo(expectedPnl, 6);
+    expect(trade.totalFeeJpy).toBeCloseTo(entryFee + exitFee, 8);
+    expect(result.realizedPnl).toBeCloseTo(expectedPnl, 6);
+    expect(result.totalFeesJpy).toBeCloseTo(entryFee + exitFee, 8);
+    expect(result.equityCurve).toEqual([{ time: 240, value: result.realizedPnl }]);
+    // this scenario is a losing trade (100 -> 105 -> 95), so it should show up as a loss, not a win
+    expect(result.lossCount).toBe(1);
+    expect(result.winCount).toBe(0);
+  });
+
+  it("does not fire again on the same still-true condition (edge-triggered, not level-triggered)", () => {
+    getCandlesForTimeframe.mockReturnValue([
+      candle(0, 100),
+      candle(60, 105),
+      candle(120, 106),
+      candle(180, 107), // still > 100 the whole time; only one buy should ever fire
+    ]);
+    const result = runBacktest(
+      baseRequest({ positionSizeJpy: 10_000, stopLossPct: 100, takeProfitPct: 0, trailingStopPct: null })
+    );
+    // no sell edge occurs, so the position stays open and produces no closed trade
+    expect(result.trades).toHaveLength(0);
+  });
+});
+
+describe("runBacktest / exit priority and the conservative same-candle approximation", () => {
+  it("prioritizes trailing_stop over stop_loss when both trigger on the candle's low (matches live priority)", () => {
+    getCandlesForTimeframe.mockReturnValue([
+      candle(0, 0), // condition false (0 <= 50)
+      candle(60, 100), // buy edge fires (0 -> 100 crosses above 50); entry price basis ~100
+      // this candle both raises the peak to 130 (high) and, on the low, breaches a 1% trailing
+      // stop from that new peak; a 50% stop-loss would never trip here regardless
+      candle(120, 100, { high: 130, low: 130 * (1 - 0.01) - 1 }),
+    ]);
+    const result = runBacktest(
+      baseRequest({
+        graph: buyOnceGraph(),
+        positionSizeJpy: 10_000,
+        stopLossPct: 50,
+        takeProfitPct: 0,
+        trailingStopPct: 1,
+      })
+    );
+    expect(result.trades).toHaveLength(1);
+    expect(result.trades[0].closeReason).toBe("trailing_stop");
+  });
+
+  it("treats a same-candle stop-loss (low) as happening before a take-profit (high) - conservative approximation", () => {
+    getCandlesForTimeframe.mockReturnValue([
+      candle(0, 0),
+      candle(60, 100), // buy edge fires, entry price basis ~100
+      // this candle's high clears +5% take-profit AND its low clears -5% stop-loss at once;
+      // the backtest must assume the worst case (stop_loss) rather than take_profit
+      candle(120, 100, { high: 110, low: 90 }),
+    ]);
+    const result = runBacktest(
+      baseRequest({
+        graph: buyOnceGraph(),
+        positionSizeJpy: 10_000,
+        stopLossPct: 5,
+        takeProfitPct: 5,
+        trailingStopPct: null,
+      })
+    );
+    expect(result.trades).toHaveLength(1);
+    expect(result.trades[0].closeReason).toBe("stop_loss");
+  });
+
+  it("still resolves take_profit when only the high clears it and the low never threatens stop_loss/trailing", () => {
+    getCandlesForTimeframe.mockReturnValue([
+      candle(0, 0),
+      candle(60, 100), // buy edge fires, entry price basis ~100
+      candle(120, 100, { high: 110, low: 99 }), // +10% high clears +5% take-profit; low stays well inside
+    ]);
+    const result = runBacktest(
+      baseRequest({
+        graph: buyOnceGraph(),
+        positionSizeJpy: 10_000,
+        stopLossPct: 50,
+        takeProfitPct: 5,
+        trailingStopPct: null,
+      })
+    );
+    expect(result.trades).toHaveLength(1);
+    expect(result.trades[0].closeReason).toBe("take_profit");
+    expect(result.trades[0].pnl).toBeGreaterThan(0);
+  });
+});
+
+describe("runBacktest / ai_judgment nodes never fire and surface a warning", () => {
+  it("treats an ai_judgment-gated buy condition as always-false and warns that it can't be replayed", () => {
+    const graph: StrategyGraph = {
+      nodes: [
+        { id: "judge", type: "ai_judgment", params: { expect: "buy", minConfidence: 0 }, position: { x: 0, y: 0 } },
+        { id: "buy1", type: "buy", params: {}, position: { x: 0, y: 0 } },
+      ],
+      edges: [{ id: "e1", source: "judge", target: "buy1", targetHandle: "condition" }],
+    };
+    getCandlesForTimeframe.mockReturnValue([candle(0, 100), candle(60, 100), candle(120, 100)]);
+    const result = runBacktest(baseRequest({ graph }));
+    expect(result.trades).toHaveLength(0);
+    expect(result.warnings.some((w) => w.includes("AI Judgment"))).toBe(true);
+  });
+});
+
+describe("runBacktest / maxOpenPositions caps concurrent simulated positions", () => {
+  it("blocks a second buy edge while at the cap, so a later take-profit only closes the one allowed position", () => {
+    getCandlesForTimeframe.mockReturnValue([
+      candle(0, 90), // condition false
+      candle(60, 110), // buy edge #1 -> opens position A (~110)
+      candle(120, 90), // condition false again (falling edge, no action)
+      candle(180, 110), // buy edge #2 -> would open position B, but the cap (1) should block it
+      candle(240, 130), // clears +5% take-profit for position A (and would for B too, if it existed)
+    ]);
+    const result = runBacktest(
+      baseRequest({
+        graph: buyOnlyOscillatingGraph(),
+        maxOpenPositions: 1,
+        positionSizeJpy: 10_000,
+        stopLossPct: 100,
+        takeProfitPct: 5,
+        trailingStopPct: null,
+      })
+    );
+    // if the cap didn't hold, both position A and the blocked position B would have cleared
+    // take-profit on the final candle, producing 2 trades instead of 1
+    expect(result.trades).toHaveLength(1);
+    expect(result.trades[0].closeReason).toBe("take_profit");
+  });
+});
