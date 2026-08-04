@@ -33,6 +33,7 @@ import {
 import { AppHeader } from "@/components/ui/AppHeader";
 import { CyberPanel } from "@/components/ui/CyberPanel";
 import { CyberButton } from "@/components/ui/CyberButton";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { BlueprintNodeView, type BlueprintFlowNode } from "@/components/strategy/BlueprintNode";
 import { NodePalette, DND_MIME } from "@/components/strategy/NodePalette";
 import { StrategyList } from "@/components/strategy/StrategyList";
@@ -147,6 +148,15 @@ function StrategyEditor() {
   // P&L ReportのAI Reviewから引き継がれた参考テキスト(あればAI Strategy Genへ渡す)
   const [reviewContext, setReviewContext] = useState<string | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
+  // window.confirm()の代わりに使う非ブロッキングな確認ダイアログの保留状態(#29)。
+  // nullなら非表示、値があれば開いた状態でその内容を表示する
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    title: string;
+    description: string;
+    confirmLabel: string;
+    tone: "red" | "cyan";
+    onConfirm: () => void;
+  } | null>(null);
 
   const { botSignals } = useServerEvents([]);
 
@@ -354,55 +364,77 @@ function StrategyEditor() {
 
   const handleLoadTemplate = useCallback(
     (template: StrategyTemplate) => {
-      if (
-        nodes.length > 0 &&
-        !window.confirm(`キャンバスをテンプレート「${template.name}」で置き換えます。よろしいですか?`)
-      ) {
+      const apply = () => {
+        const { nodes: n, edges: e } = fromGraph(template.graph);
+        setNodes(n);
+        setEdges(e);
+        setSelectedId(null);
+        setName(template.name);
+        notify(`テンプレート「${template.name}」を展開しました。SaveするとDeployできます`);
+        window.requestAnimationFrame(() => fitView({ padding: 0.15 }));
+      };
+      if (nodes.length > 0) {
+        setPendingConfirm({
+          title: "テンプレートを読み込みますか?",
+          description: `キャンバスをテンプレート「${template.name}」で置き換えます。よろしいですか?`,
+          confirmLabel: "置き換える",
+          tone: "cyan",
+          onConfirm: apply,
+        });
         return;
       }
-      const { nodes: n, edges: e } = fromGraph(template.graph);
-      setNodes(n);
-      setEdges(e);
-      setSelectedId(null);
-      setName(template.name);
-      notify(`テンプレート「${template.name}」を展開しました。SaveするとDeployできます`);
-      window.requestAnimationFrame(() => fitView({ padding: 0.15 }));
+      apply();
     },
     [nodes.length, setNodes, setEdges, notify, fitView]
   );
 
   const handleGenerated = useCallback(
     (result: GeneratedStrategy) => {
-      if (
-        nodes.length > 0 &&
-        !window.confirm(`キャンバスをAI生成の戦略「${result.name}」で置き換えます。よろしいですか?`)
-      ) {
+      const apply = () => {
+        const { nodes: n, edges: e } = fromGraph(result.graph);
+        setNodes(n);
+        setEdges(e);
+        setSelectedId(null);
+        setName(result.name);
+        notify(
+          `AIが戦略「${result.name}」を生成しました(推定コスト ¥${result.usage.estimatedCostJpy.toFixed(2)})。内容を確認してSaveしてください`
+        );
+        window.requestAnimationFrame(() => fitView({ padding: 0.15 }));
+      };
+      if (nodes.length > 0) {
+        setPendingConfirm({
+          title: "AI生成結果を適用しますか?",
+          description: `キャンバスをAI生成の戦略「${result.name}」で置き換えます。よろしいですか?`,
+          confirmLabel: "置き換える",
+          tone: "cyan",
+          onConfirm: apply,
+        });
         return;
       }
-      const { nodes: n, edges: e } = fromGraph(result.graph);
-      setNodes(n);
-      setEdges(e);
-      setSelectedId(null);
-      setName(result.name);
-      notify(
-        `AIが戦略「${result.name}」を生成しました(推定コスト ¥${result.usage.estimatedCostJpy.toFixed(2)})。内容を確認してSaveしてください`
-      );
-      window.requestAnimationFrame(() => fitView({ padding: 0.15 }));
+      apply();
     },
     [nodes.length, setNodes, setEdges, notify, fitView]
   );
 
   const handleDelete = useCallback(
-    async (strategy: Strategy) => {
-      if (!window.confirm(`戦略 "${strategy.name}" を削除しますか?`)) return;
-      try {
-        await deleteStrategy(strategy.id);
-        if (selectedId === strategy.id) setSelectedId(null);
-        notify(`戦略 "${strategy.name}" を削除しました`);
-        await refreshList();
-      } catch (err) {
-        notify(err instanceof Error ? err.message : "削除に失敗しました", "red");
-      }
+    (strategy: Strategy) => {
+      const apply = async () => {
+        try {
+          await deleteStrategy(strategy.id);
+          if (selectedId === strategy.id) setSelectedId(null);
+          notify(`戦略 "${strategy.name}" を削除しました`);
+          await refreshList();
+        } catch (err) {
+          notify(err instanceof Error ? err.message : "削除に失敗しました", "red");
+        }
+      };
+      setPendingConfirm({
+        title: "戦略を削除しますか?",
+        description: `戦略 "${strategy.name}" を削除しますか?`,
+        confirmLabel: "削除する",
+        tone: "red",
+        onConfirm: () => void apply(),
+      });
     },
     [selectedId, notify, refreshList]
   );
@@ -453,6 +485,7 @@ function StrategyEditor() {
               _focus={{ borderColor: "signal.cyan", boxShadow: "glowCyanSm" }}
             />
             <chakra.select
+              aria-label="ペア"
               value={pair}
               onChange={(e) => setPair(e.target.value)}
               bg="bg.surface"
@@ -475,6 +508,7 @@ function StrategyEditor() {
               ))}
             </chakra.select>
             <chakra.select
+              aria-label="時間足"
               value={timeframe}
               onChange={(e) => setTimeframe(e.target.value as CandleTimeframe)}
               bg="bg.surface"
@@ -633,6 +667,18 @@ function StrategyEditor() {
       </GridItem>
     </Grid>
     </Stack>
+    <ConfirmDialog
+      open={pendingConfirm !== null}
+      title={pendingConfirm?.title ?? ""}
+      description={pendingConfirm?.description ?? ""}
+      confirmLabel={pendingConfirm?.confirmLabel}
+      tone={pendingConfirm?.tone}
+      onConfirm={() => {
+        pendingConfirm?.onConfirm();
+        setPendingConfirm(null);
+      }}
+      onCancel={() => setPendingConfirm(null)}
+    />
     </LiveValuesContext.Provider>
   );
 }
