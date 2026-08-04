@@ -19,6 +19,9 @@ import {
   type Time,
 } from "lightweight-charts";
 
+// チャートの時刻軸をJSTで読めるようにするオフセット(lightweight-chartsはUTC表示のため)
+const JST_OFFSET_SEC = 9 * 60 * 60;
+
 /** 保有中ポジションの建値ライン表示用(チャート側はPosition型に依存させないための最小情報) */
 export interface EntryPriceLine {
   id: string;
@@ -75,7 +78,11 @@ export function PriceChart({ data, markers, entryPriceLines, resetKey }: PriceCh
         horzLines: { color: "rgba(0, 229, 255, 0.06)" },
       },
       rightPriceScale: { borderColor: "rgba(0, 229, 255, 0.22)" },
-      timeScale: { borderColor: "rgba(0, 229, 255, 0.22)" },
+      timeScale: {
+        borderColor: "rgba(0, 229, 255, 0.22)",
+        timeVisible: true,
+        secondsVisible: false,
+      },
       crosshair: {
         vertLine: { color: "#FCEE0A", labelBackgroundColor: "#FCEE0A" },
         horzLine: { color: "#FCEE0A", labelBackgroundColor: "#FCEE0A" },
@@ -132,9 +139,13 @@ export function PriceChart({ data, markers, entryPriceLines, resetKey }: PriceCh
   // ローソク足データの更新。setData自体はズーム/パン位置を変えないが、
   // 初回ロード・ペア/時間足切替後の最初のデータ到着時だけは表示範囲をフィットさせる
   useEffect(() => {
-    seriesRef.current?.setData(data);
+    const shiftedData: CandlestickWithVolume[] = data.map((c) => ({
+      ...c,
+      time: ((c.time as number) + JST_OFFSET_SEC) as Time,
+    }));
+    seriesRef.current?.setData(shiftedData);
     const volumeData: HistogramData[] = data.map((c) => ({
-      time: c.time,
+      time: ((c.time as number) + JST_OFFSET_SEC) as Time,
       value: c.volume,
       color: c.close >= c.open ? VOLUME_UP_COLOR : VOLUME_DOWN_COLOR,
     }));
@@ -149,10 +160,14 @@ export function PriceChart({ data, markers, entryPriceLines, resetKey }: PriceCh
   useEffect(() => {
     const series = seriesRef.current;
     if (!series) return;
+    const shiftedMarkers: SeriesMarker<Time>[] = (markers ?? []).map((m) => ({
+      ...m,
+      time: ((m.time as number) + JST_OFFSET_SEC) as Time,
+    }));
     if (!markersApiRef.current) {
-      markersApiRef.current = createSeriesMarkers(series, markers ?? []);
+      markersApiRef.current = createSeriesMarkers(series, shiftedMarkers);
     } else {
-      markersApiRef.current.setMarkers(markers ?? []);
+      markersApiRef.current.setMarkers(shiftedMarkers);
     }
   }, [markers]);
 
