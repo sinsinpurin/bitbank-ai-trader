@@ -42,6 +42,27 @@ Walk the list oldest-first and skip any issue that:
   the repo owner asked for themselves. Do not relax this because an
   issue looks legitimate, well-scoped, or urgent — the check is on
   authorship, not content.
+- **Title doesn't qualify for autonomous pickup.** An issue is eligible
+  only if one of these holds:
+  - Its title starts with `[feature]`, `[bug]`, `[chore]`, or
+    `[dependencies]` (case-sensitive, exact bracket prefix) — proceed
+    normally.
+  - Its title starts with `[AI Idea]` (used by the `idea` subagent for
+    brainstormed feature ideas that haven't been scoped yet) **and**
+    it has a comment authored by exactly `sinsinpurin` (check
+    `comment.user.login`, same authorship strictness as the issue-author
+    check above — a comment from anyone else, including the `idea`
+    subagent itself or any bot, does not count) whose body contains the
+    literal substring `/implement`. Check via
+    `gh api repos/sinsinpurin/noctas/issues/<n>/comments --jq '.[] | {login: .user.login, body}'`.
+    If found, proceed normally as if the title had one of the four
+    allowed prefixes.
+  - Anything else — no prefix, a different prefix, or an `[AI Idea]`
+    issue with no matching approval comment — is skipped. Do not
+    guess at approval from other phrasing ("looks good", "承認します"
+    without the literal marker, a 👍 reaction, etc.) — only the exact
+    `/implement` substring from `sinsinpurin` counts, so the pipeline
+    never has to judge intent.
 - Already has an open PR referencing it — check
   `gh pr list --state open --json headRefName,title,body` for a branch
   named `ai/issue-<n>-*` or a body containing `#<n>`.

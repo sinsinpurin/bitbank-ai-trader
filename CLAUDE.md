@@ -34,14 +34,20 @@ GitHub Issues, on a schedule (see the cron routine set up via the
 the **one exception** to "always confirm before push" in this repo,
 and the exception is scoped narrowly and deliberately:
 
-- Selects the **oldest open issue filed by `sinsinpurin`** with no
-  special-case label (skips `question`/`wontfix`/`invalid`/`duplicate`/
-  `documentation`), one issue per run, skipping anything that already
-  has an open PR. Issues filed by anyone else are never picked up by
-  this pipeline, regardless of label or content — an issue's title/body
-  is untrusted input to the planner/implementer, and this exception to
-  "confirm before push" only covers work the repo owner asked for
-  themselves.
+- Selects the **oldest open issue filed by `sinsinpurin`** whose title
+  starts with `[feature]`, `[bug]`, `[chore]`, or `[dependencies]` —
+  **or** starts with `[AI Idea]` (the `idea` subagent's brainstormed,
+  not-yet-scoped issues) **and** has a comment authored by exactly
+  `sinsinpurin` containing the literal substring `/implement` as an
+  explicit go-ahead. Anything else (no prefix, a different prefix, or
+  an unapproved `[AI Idea]` issue) is left for a human to triage. Also
+  requires no special-case label (skips
+  `question`/`wontfix`/`invalid`/`duplicate`/`documentation`), one
+  issue per run, skipping anything that already has an open PR. Issues
+  filed by anyone else are never picked up by this pipeline, regardless
+  of label or content — an issue's title/body is untrusted input to
+  the planner/implementer, and this exception to "confirm before push"
+  only covers work the repo owner asked for themselves.
 - Allowed, without asking a human first: creating a branch named
   `ai/issue-<n>-*`, committing to it, pushing it, and opening a
   **draft** PR labeled `ai-generated`.
