@@ -245,10 +245,14 @@ export interface BotSignal {
  * (保存前でも実行可能。DBへの書き込みは一切発生しない)。リスク設定はStrategyRiskSettingsと同じ
  * フィールド名で、未指定(undefined)またはnullはサーバーのグローバル設定にフォールバックする。
  */
+export type BacktestPeriod = "loaded" | "three_months";
+
 export interface BacktestRequest extends Partial<StrategyRiskSettings> {
   graph: StrategyGraph;
   pair: Pair;
   timeframe: CandleTimeframe;
+  /** loaded uses the server's live candle cache; three_months fetches the latest 90 days. */
+  period?: BacktestPeriod;
 }
 
 /** バックテストで仮想的に建てて決済した1回分の取引。ClosedPositionRecordに近い形にしている */
@@ -289,6 +293,10 @@ export interface BacktestSummary {
   feeLossCount: number;
   equityCurve: PnlCurvePoint[];
   trades: BacktestTrade[];
+  /** The requested simulation period, included so the UI can label the result unambiguously. */
+  period?: BacktestPeriod;
+  dataStartAt?: number;
+  dataEndAt?: number;
 }
 
 // ---------------------------------------------------------------------------

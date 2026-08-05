@@ -136,3 +136,19 @@ model VirtualBalance {
   amount    Float
   updatedAt DateTime @updatedAt
 }
+
+// Raw 1-minute candles retained for the 3-month simulation snapshot.
+model HistoricalCandle {
+  id        String   @id @default(cuid())
+  pair      String
+  time      Int
+  open      Float
+  high      Float
+  low       Float
+  close     Float
+  volume    Float
+  createdAt DateTime @default(now())
+
+  @@unique([pair, time])
+  @@index([pair, time])
+}
