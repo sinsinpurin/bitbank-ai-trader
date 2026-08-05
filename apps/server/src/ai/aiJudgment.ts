@@ -4,7 +4,7 @@ import { prisma } from "../db/prisma";
 import { broadcast } from "../ws/relay";
 import { config } from "../config";
 import { estimateCostJpy } from "./pricing";
-import type { AiJudgment, AiUsageStats } from "@noctas/shared";
+import { latestValue, rsi, sma, type AiJudgment, type AiUsageStats } from "@noctas/shared";
 
 /**
  * Bot Blueprintの「AI Judgment」ノードへ供給する、ペアごとの最新AI判断キャッシュ。
@@ -118,6 +118,12 @@ async function refreshPair(pair: string, now: number) {
   const last = hist[hist.length - 1];
   if (!shouldCallNow(pair, last, now)) return;
 
+  const indicators = {
+    sma5: latestValue(sma(hist, 5)),
+    sma20: latestValue(sma(hist, 20)),
+    rsi14: latestValue(rsi(hist, 14)),
+  };
+
   const snapshot: MarketSnapshot = {
     pair,
     last,
@@ -125,6 +131,7 @@ async function refreshPair(pair: string, now: number) {
     low24h: Math.min(...hist),
     vol24h: latestVol.get(pair) ?? 0,
     recentPrices: [...hist],
+    indicators,
   };
 
   const decision = await getAiDecision(snapshot);
