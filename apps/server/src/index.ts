@@ -17,6 +17,7 @@ import {
   reloadActiveStrategies,
   seedCandleHistory,
 } from "./strategy/botEngine";
+import { syncHistoricalCandles } from "./strategy/historicalCandleStore";
 import { strategyRoutes } from "./strategy/routes";
 import { pnlRoutes } from "./pnl/routes";
 import { settingsRoutes } from "./settings/routes";
@@ -137,8 +138,20 @@ async function main() {
 
   await app.listen({ port: config.port, host: "0.0.0.0" });
 
+  // Keep a rolling 90-day DB snapshot for the explicit 0-step simulation.
+  // The first fill runs in the background so the live server can become ready
+  // immediately; the UI reports a retryable error until the snapshot exists.
+  const syncHistoricalSnapshot = () =>
+    Promise.all(config.targetPairs.map((pair) => syncHistoricalCandles(pair)))
+      .then((results) => app.log.info({ results }, "historical candle snapshot synced"))
+      .catch((err) => app.log.warn({ err }, "historical candle snapshot sync failed"));
+  void syncHistoricalSnapshot();
+  const historicalSyncTimer = setInterval(syncHistoricalSnapshot, 6 * 60 * 60 * 1000);
+  historicalSyncTimer.unref();
+
   process.on("SIGINT", () => {
     stopAiJudgmentLoop();
+    clearInterval(historicalSyncTimer);
     app.close().finally(() => process.exit(0));
   });
 }

@@ -3,6 +3,7 @@ import type { Strategy as PrismaStrategy } from "@prisma/client";
 import {
   DEFAULT_CANDLE_TIMEFRAME,
   isCandleTimeframe,
+  minutesOfTimeframe,
   parseGraph,
   type BacktestRequest,
   type CandleTimeframe,
@@ -10,7 +11,8 @@ import {
   type StrategyGraph,
 } from "@noctas/shared";
 import { prisma } from "../db/prisma";
-import { reloadActiveStrategies } from "./botEngine";
+import { aggregateCandles, reloadActiveStrategies } from "./botEngine";
+import { getHistoricalCandles } from "./historicalCandleStore";
 import { runBacktest } from "./backtestEngine";
 import { broadcast } from "../ws/relay";
 import { generateStrategyFromPrompt } from "../ai/strategyGenerator";
@@ -177,7 +179,7 @@ export async function strategyRoutes(app: FastifyInstance) {
   // 保存前(未保存でも可)のグラフを、サーバーが保持している過去ローソク足履歴に対して
   // ウォークフォワードで再生する読み取り専用のバックテスト。DBへの書き込みは一切行わない
   app.post<{ Body: BacktestRequest }>("/api/strategies/backtest", async (request, reply) => {
-    const { graph, pair, timeframe } = request.body ?? ({} as BacktestRequest);
+    const { graph, pair, timeframe, period = "loaded" } = request.body ?? ({} as BacktestRequest);
     if (!validateGraph(graph)) {
       return reply.status(400).send({ error: "graph (nodes/edges) は必須です" });
     }
@@ -187,13 +189,23 @@ export async function strategyRoutes(app: FastifyInstance) {
     if (!timeframe || !isCandleTimeframe(timeframe)) {
       return reply.status(400).send({ error: `未対応の時間足です: ${timeframe}` });
     }
+    if (period !== "loaded" && period !== "three_months") {
+      return reply.status(400).send({ error: `unsupported backtest period: ${period}` });
+    }
     const riskError = validateRiskSettings(request.body ?? {});
     if (riskError) {
       return reply.status(400).send({ error: riskError });
     }
 
     try {
-      return runBacktest({ ...request.body, graph, pair, timeframe });
+      const candlesOverride =
+        period === "three_months"
+          ? aggregateCandles(await getHistoricalCandles(pair), minutesOfTimeframe(timeframe))
+          : undefined;
+      if (period === "three_months" && (!candlesOverride || candlesOverride.length < 2)) {
+        return reply.status(503).send({ error: "3-month candle snapshot is not ready yet; please retry after the next sync" });
+      }
+      return runBacktest({ ...request.body, graph, pair, timeframe, period }, candlesOverride);
     } catch (err) {
       request.log.error(err, "バックテストの実行に失敗しました");
       return reply.status(500).send({
