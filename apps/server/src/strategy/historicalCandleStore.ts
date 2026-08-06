@@ -20,10 +20,15 @@ export async function syncHistoricalCandles(pair: string): Promise<{ fetched: nu
   // window exists, only the last two days are fetched to repair gaps and add
   // new candles without repeatedly downloading 90 days.
   const daysToFetch = !latest || !oldest || oldest.time > cutoff + 24 * 60 * 60 ? RETENTION_DAYS : REFRESH_DAYS;
-  const candles = await fetchHistoricalCandles(pair, daysToFetch);
-  if (candles.length > 0) {
+  const { candles, complete } = await fetchHistoricalCandles(pair, daysToFetch);
+  if (candles.length > 0 && complete) {
     // Replace the fetched range so SQLite does not need skipDuplicates
-    // semantics (which are not available for this datasource).
+    // semantics (which are not available for this datasource). Only do this
+    // when every requested day was fetched successfully: if a day silently
+    // failed (see fetchHistoricalCandles), candles[0].time..now would still
+    // be deleted in full, wiping previously-stored rows (e.g. today's data)
+    // that this run failed to re-fetch. Skipping on a partial failure leaves
+    // the existing snapshot untouched until a later sync succeeds.
     await prisma.historicalCandle.deleteMany({ where: { pair, time: { gte: candles[0].time } } });
     for (let start = 0; start < candles.length; start += 500) {
       const batch = candles.slice(start, start + 500);

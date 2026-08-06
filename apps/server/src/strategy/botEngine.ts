@@ -223,16 +223,23 @@ export function getCandlesForTimeframe(pair: string, timeframe: CandleTimeframe)
     : aggregated;
 }
 
+export interface HistoricalFetchResult {
+  candles: CandleBucket[];
+  /** True only if every requested day's request succeeded (no silently-dropped days). */
+  complete: boolean;
+}
+
 /**
  * Fetch a longer, point-in-time history for an explicit historical simulation.
  * This deliberately does not modify the live candle store: the live bot only
  * needs its small warm-up cache, while the 3-month simulation needs every
  * available candle (including more than the UI response limit).
  */
-export async function fetchHistoricalCandles(pair: string, days: number): Promise<CandleBucket[]> {
+export async function fetchHistoricalCandles(pair: string, days: number): Promise<HistoricalFetchResult> {
   const requestedDays = Math.min(90, Math.max(1, Math.floor(days)));
   const offsets = Array.from({ length: requestedDays + 1 }, (_, i) => i - requestedDays);
   const candles: CandleBucket[] = [];
+  let failedDays = 0;
 
   // Keep a small concurrency window so an explicit simulation does not create
   // an unnecessary burst against the public exchange endpoint.
@@ -253,7 +260,13 @@ export async function fetchHistoricalCandles(pair: string, days: number): Promis
     );
 
     for (const json of responses) {
-      if (!json) continue;
+      if (!json) {
+        // A day whose request failed (network error, non-2xx, bad payload) is
+        // simply missing from `candles`. The caller must not treat the result
+        // as a complete replacement for the requested window in that case.
+        failedDays += 1;
+        continue;
+      }
       for (const entry of json.data.candlestick) {
         for (const [open, high, low, close, volume, ts] of entry.ohlcv) {
           candles.push({
@@ -271,7 +284,10 @@ export async function fetchHistoricalCandles(pair: string, days: number): Promis
 
   const unique = new Map<number, CandleBucket>();
   for (const candle of candles) unique.set(candle.time, candle);
-  return [...unique.values()].sort((a, b) => a.time - b.time);
+  return {
+    candles: [...unique.values()].sort((a, b) => a.time - b.time),
+    complete: failedDays === 0,
+  };
 }
 
 /** DBからアクティブ戦略を読み直す。戦略の作成・更新・有効化時に呼ぶ */
