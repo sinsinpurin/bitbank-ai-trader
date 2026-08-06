@@ -47,6 +47,31 @@ export function latestValue(series: number[]): number | null {
   return Number.isNaN(last) ? null : last;
 }
 
+/** トレーリングウィンドウの母集団標準偏差(ボラティリティの目安) */
+export function stddev(values: number[], period: number): number[] {
+  const result = new Array<number>(values.length).fill(NaN);
+  if (period <= 0) return result;
+
+  let sum = 0;
+  let sumSq = 0;
+  for (let i = 0; i < values.length; i++) {
+    sum += values[i];
+    sumSq += values[i] * values[i];
+    if (i >= period) {
+      const removed = values[i - period];
+      sum -= removed;
+      sumSq -= removed * removed;
+    }
+    if (i >= period - 1) {
+      const mean = sum / period;
+      const variance = sumSq / period - mean * mean;
+      // 浮動小数点誤差で極小の負値になることがあるため0未満はクランプする
+      result[i] = Math.sqrt(Math.max(variance, 0));
+    }
+  }
+  return result;
+}
+
 /** Wilder方式のRSI(0-100) */
 export function rsi(values: number[], period: number): number[] {
   const result = new Array<number>(values.length).fill(NaN);

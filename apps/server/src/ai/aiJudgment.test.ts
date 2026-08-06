@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { rsi, sma } from "@noctas/shared";
+import { rsi, sma, stddev } from "@noctas/shared";
 import type { MarketSnapshot } from "./claudeService";
 
 // This is a regression test for a real bug: refreshPair used to hardcode
@@ -11,19 +11,44 @@ vi.mock("./claudeService", () => ({
   getAiDecision: (...args: [MarketSnapshot]) => getAiDecision(...args),
 }));
 
+const positionFindMany = vi.fn();
 vi.mock("../db/prisma", () => ({
   prisma: {
     aiDecisionLog: {
       create: vi.fn().mockResolvedValue({ createdAt: new Date() }),
       aggregate: vi.fn().mockResolvedValue({ _sum: { inputTokens: 0, outputTokens: 0 }, _count: { id: 0 } }),
     },
+    position: {
+      findMany: (...args: unknown[]) => positionFindMany(...args),
+    },
   },
 }));
 
 vi.mock("../ws/relay", () => ({ broadcast: vi.fn() }));
 
+// aiJudgment.ts imports getCandleHistory from ../strategy/botEngine (which itself imports
+// getJudgment/setWatchedPairs from aiJudgment.ts - a deliberate circular import, see the
+// comment above that import in aiJudgment.ts). Mock the whole module so this test doesn't
+// need botEngine's candle-seeding/prisma dependencies.
+const getCandleHistory = vi.fn();
+vi.mock("../strategy/botEngine", () => ({
+  getCandleHistory: (...args: [string]) => getCandleHistory(...args),
+}));
+
+const isBuyHalted = vi.fn();
+const getCircuitBreakerStatus = vi.fn();
+vi.mock("../trading/circuitBreaker", () => ({
+  isBuyHalted: (...args: unknown[]) => isBuyHalted(...args),
+  getCircuitBreakerStatus: (...args: unknown[]) => getCircuitBreakerStatus(...args),
+}));
+
 const { recordPrice, setWatchedPairs, startAiJudgmentLoop } = await import("./aiJudgment");
 const { config } = await import("../config");
+
+/** getCandleHistory()が返すCandleBucket[]のうち、指標計算が使うcloseだけを持つ最小限のスタブ */
+function candlesFromCloses(closes: number[]): { close: number }[] {
+  return closes.map((close) => ({ close }));
+}
 
 beforeEach(() => {
   getAiDecision.mockReset().mockResolvedValue({
@@ -32,6 +57,10 @@ beforeEach(() => {
     reasoning: "test",
     usage: { inputTokens: 0, outputTokens: 0, model: config.ai.model },
   });
+  positionFindMany.mockReset().mockResolvedValue([]);
+  getCandleHistory.mockReset().mockReturnValue([]);
+  isBuyHalted.mockReset().mockReturnValue(false);
+  getCircuitBreakerStatus.mockReset().mockReturnValue({ halted: false, reason: null, haltedAt: null });
   vi.useFakeTimers();
 });
 
@@ -84,56 +113,134 @@ describe("aiJudgment / vol24h in the Claude snapshot", () => {
 });
 
 describe("aiJudgment / indicators in the Claude snapshot", () => {
-  it("reports null for every indicator until there's enough price history", async () => {
+  it("reports null for every indicator until there's enough candle history", async () => {
     setWatchedPairs(new Set(["ltc_jpy"]));
-    // Fewer than 5 ticks: sma5/sma20/rsi14 all need more history than this.
     recordPrice("ltc_jpy", 100);
-    recordPrice("ltc_jpy", 101);
-    recordPrice("ltc_jpy", 102);
+    // Fewer than 20 candles: rsi14/smaDeviationPct/volatilityPct all need more history than this.
+    getCandleHistory.mockReturnValue(candlesFromCloses([100, 101, 102]));
 
     const stop = startAiJudgmentLoop();
     await vi.advanceTimersByTimeAsync(config.ai.pollIntervalMs);
     stop();
 
     const snapshot = getAiDecision.mock.calls[0][0] as MarketSnapshot;
-    expect(snapshot.indicators).toEqual({ sma5: null, sma20: null, rsi14: null });
+    expect(snapshot.indicators).toEqual({ rsi14: null, smaDeviationPct: null, volatilityPct: null });
   });
 
-  it("fills sma5 once 5 ticks are recorded, while sma20/rsi14 stay null", async () => {
-    setWatchedPairs(new Set(["etc_jpy"]));
-    const prices = [100, 101, 99, 102, 103];
-    for (const p of prices) recordPrice("etc_jpy", p);
-
-    const stop = startAiJudgmentLoop();
-    await vi.advanceTimersByTimeAsync(config.ai.pollIntervalMs);
-    stop();
-
-    const snapshot = getAiDecision.mock.calls[0][0] as MarketSnapshot;
-    expect(snapshot.indicators.sma5).toBeCloseTo((100 + 101 + 99 + 102 + 103) / 5);
-    expect(snapshot.indicators.sma20).toBeNull();
-    expect(snapshot.indicators.rsi14).toBeNull();
-  });
-
-  it("computes sma5/sma20/rsi14 matching the shared indicator functions once fully warmed up", async () => {
+  it("computes rsi14/smaDeviationPct/volatilityPct matching the shared indicator functions once fully warmed up", async () => {
     setWatchedPairs(new Set(["mona_jpy"]));
-    // 20 ticks: enough for sma20 (needs >=20) and rsi14 (needs >=15, i.e. >period).
-    const prices = [
+    recordPrice("mona_jpy", 122); // tick price only gates the cooldown check; indicators come from candles
+    // 25 closes: enough for rsi14 (needs >14) and sma20/stddev20 (need >=20).
+    const closes = [
       100, 102, 101, 103, 105, 104, 106, 108, 107, 109, 110, 108, 111, 113, 112, 114, 115, 113,
-      116, 118,
+      116, 118, 120, 119, 121, 123, 122,
     ];
-    for (const p of prices) recordPrice("mona_jpy", p);
+    getCandleHistory.mockReturnValue(candlesFromCloses(closes));
 
     const stop = startAiJudgmentLoop();
     await vi.advanceTimersByTimeAsync(config.ai.pollIntervalMs);
     stop();
 
     const snapshot = getAiDecision.mock.calls[0][0] as MarketSnapshot;
-    const expectedSma5 = sma(prices, 5).at(-1)!;
-    const expectedSma20 = sma(prices, 20).at(-1)!;
-    const expectedRsi14 = rsi(prices, 14).at(-1)!;
+    const expectedRsi14 = rsi(closes, 14).at(-1)!;
+    const expectedSma20 = sma(closes, 20).at(-1)!;
+    const expectedStddev20 = stddev(closes, 20).at(-1)!;
+    const expectedDeviationPct = ((closes.at(-1)! - expectedSma20) / expectedSma20) * 100;
+    const expectedVolatilityPct = (expectedStddev20 / expectedSma20) * 100;
 
-    expect(snapshot.indicators.sma5).toBeCloseTo(expectedSma5);
-    expect(snapshot.indicators.sma20).toBeCloseTo(expectedSma20);
     expect(snapshot.indicators.rsi14).toBeCloseTo(expectedRsi14);
+    expect(snapshot.indicators.smaDeviationPct).toBeCloseTo(expectedDeviationPct);
+    expect(snapshot.indicators.volatilityPct).toBeCloseTo(expectedVolatilityPct);
+  });
+});
+
+describe("aiJudgment / position context in the Claude snapshot", () => {
+  it("reports no position when there are no open buy positions for the pair", async () => {
+    setWatchedPairs(new Set(["doge_jpy"]));
+    recordPrice("doge_jpy", 30);
+    positionFindMany.mockResolvedValue([]);
+
+    const stop = startAiJudgmentLoop();
+    await vi.advanceTimersByTimeAsync(config.ai.pollIntervalMs);
+    stop();
+
+    const snapshot = getAiDecision.mock.calls[0][0] as MarketSnapshot;
+    expect(snapshot.position).toEqual({
+      hasOpenPosition: false,
+      openCount: 0,
+      unrealizedPnlJpy: null,
+      unrealizedPnlPct: null,
+    });
+  });
+
+  it("computes unrealized pnl (weighted by cost) from open positions using the current tick price", async () => {
+    setWatchedPairs(new Set(["sol_jpy"]));
+    recordPrice("sol_jpy", 500_000);
+    positionFindMany.mockResolvedValue([
+      { entryPrice: 480_000, amount: 0.1 },
+      { entryPrice: 490_000, amount: 0.2 },
+    ]);
+
+    const stop = startAiJudgmentLoop();
+    await vi.advanceTimersByTimeAsync(config.ai.pollIntervalMs);
+    stop();
+
+    const snapshot = getAiDecision.mock.calls[0][0] as MarketSnapshot;
+    expect(snapshot.position.hasOpenPosition).toBe(true);
+    expect(snapshot.position.openCount).toBe(2);
+    // (500000-480000)*0.1 + (500000-490000)*0.2 = 2000 + 2000 = 4000
+    expect(snapshot.position.unrealizedPnlJpy).toBeCloseTo(4000);
+    // cost-weighted: (480000*0.1 + 490000*0.2) = 146000; pct = 4000 / 146000 * 100
+    expect(snapshot.position.unrealizedPnlPct).toBeCloseTo((4000 / 146_000) * 100);
+  });
+
+  it("queries prisma.position.findMany with the same {pair, side: buy, closedAt: null} shape as pnl/summary.ts", async () => {
+    setWatchedPairs(new Set(["bch_jpy"]));
+    recordPrice("bch_jpy", 100);
+
+    const stop = startAiJudgmentLoop();
+    await vi.advanceTimersByTimeAsync(config.ai.pollIntervalMs);
+    stop();
+
+    expect(positionFindMany).toHaveBeenCalledWith({
+      where: { pair: "bch_jpy", side: "buy", closedAt: null },
+    });
+  });
+});
+
+describe("aiJudgment / circuit breaker context in the Claude snapshot", () => {
+  it("reflects an active halt", async () => {
+    setWatchedPairs(new Set(["ada_jpy"]));
+    recordPrice("ada_jpy", 100);
+    isBuyHalted.mockReturnValue(true);
+    getCircuitBreakerStatus.mockReturnValue({
+      halted: true,
+      reason: "本日の実現損失が上限に達しました",
+      haltedAt: Date.now(),
+    });
+
+    const stop = startAiJudgmentLoop();
+    await vi.advanceTimersByTimeAsync(config.ai.pollIntervalMs);
+    stop();
+
+    const snapshot = getAiDecision.mock.calls[0][0] as MarketSnapshot;
+    expect(snapshot.circuitBreaker).toEqual({
+      buyHalted: true,
+      reason: "本日の実現損失が上限に達しました",
+    });
+  });
+
+  it("reflects a normal (not halted) state", async () => {
+    setWatchedPairs(new Set(["trx_jpy"]));
+    recordPrice("trx_jpy", 20);
+    isBuyHalted.mockReturnValue(false);
+    getCircuitBreakerStatus.mockReturnValue({ halted: false, reason: null, haltedAt: null });
+
+    const stop = startAiJudgmentLoop();
+    await vi.advanceTimersByTimeAsync(config.ai.pollIntervalMs);
+    stop();
+
+    const snapshot = getAiDecision.mock.calls[0][0] as MarketSnapshot;
+    expect(snapshot.circuitBreaker).toEqual({ buyHalted: false, reason: null });
   });
 });

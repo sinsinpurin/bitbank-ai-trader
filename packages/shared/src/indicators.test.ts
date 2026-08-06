@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ema, latestValue, rsi, sma } from "./indicators";
+import { ema, latestValue, rsi, sma, stddev } from "./indicators";
 
 describe("sma", () => {
   it("fills NaN until enough history, then averages the trailing window", () => {
@@ -55,6 +55,31 @@ describe("rsi", () => {
 
   it("returns all-NaN when the series isn't longer than the period", () => {
     const result = rsi([1, 2, 3], 14);
+    expect(result.every((v) => Number.isNaN(v))).toBe(true);
+  });
+});
+
+describe("stddev", () => {
+  it("fills NaN until enough history, then computes the trailing population stddev", () => {
+    const result = stddev([1, 2, 3, 4, 5], 3);
+    expect(result[0]).toBeNaN();
+    expect(result[1]).toBeNaN();
+    // window [1,2,3]: mean=2, variance=((1-2)^2+(2-2)^2+(3-2)^2)/3 = 2/3
+    expect(result[2]).toBeCloseTo(Math.sqrt(2 / 3));
+    // window [2,3,4]: mean=3, variance=2/3
+    expect(result[3]).toBeCloseTo(Math.sqrt(2 / 3));
+    // window [3,4,5]: mean=4, variance=2/3
+    expect(result[4]).toBeCloseTo(Math.sqrt(2 / 3));
+  });
+
+  it("returns 0 once warmed up for a constant series", () => {
+    const result = stddev([5, 5, 5, 5], 2);
+    expect(result[1]).toBeCloseTo(0);
+    expect(result[3]).toBeCloseTo(0);
+  });
+
+  it("returns all-NaN for a non-positive period", () => {
+    const result = stddev([1, 2, 3], 0);
     expect(result.every((v) => Number.isNaN(v))).toBe(true);
   });
 });
