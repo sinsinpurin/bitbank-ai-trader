@@ -150,7 +150,9 @@ async function refreshPair(pair: string, now: number) {
   let unrealizedPnlJpy: number | null = null;
   let unrealizedPnlPct: number | null = null;
   if (hasOpenPosition) {
-    // pnl/summary.tsと同じ (last - entryPrice) * amount 方式で建玉ごとの含み損益を合算する。
+    // pnl/summary.tsと同じ (現在値 - entryPrice) * amount 方式で建玉ごとの含み損益を合算する
+    // (ただし現在値はpnl/summary.tsのローソク足終値ではなく、ここではtickerの直近値lastを使う。
+    // プロンプトへの参考情報であり、ダッシュボードのPnLと1円単位で一致させる必要はないため)。
     // %損益は複数ポジションがある場合、投下元本(entryPrice*amount)で加重平均する
     // (単純平均だと小さいポジションの極端な%変動に引っ張られてしまうため)。
     let totalPnlJpy = 0;
