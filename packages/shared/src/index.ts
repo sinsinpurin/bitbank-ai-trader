@@ -300,6 +300,62 @@ export interface BacktestSummary {
 }
 
 // ---------------------------------------------------------------------------
+// ウォークフォワード検証(アクティブ戦略のSL/TP/トレーリングを複数ウィンドウで最適化・検証する)
+// ---------------------------------------------------------------------------
+
+/** グリッドサーチで試すSL/TP/トレーリングストップの候補値。戦略の保存済み設定は書き換えない */
+export interface WalkForwardParamGrid {
+  stopLossPct: number[];
+  takeProfitPct: number[];
+  trailingStopPct: (number | null)[];
+}
+
+export interface WalkForwardWindowResult {
+  windowIndex: number;
+  inSampleStart: number;
+  inSampleEnd: number;
+  outOfSampleStart: number;
+  outOfSampleEnd: number;
+  bestParams: { stopLossPct: number; takeProfitPct: number; trailingStopPct: number | null };
+  inSample: BacktestSummary;
+  outOfSample: BacktestSummary;
+}
+
+export interface WalkForwardSummary {
+  warnings: string[];
+  windowCount: number;
+  windows: WalkForwardWindowResult[];
+  aggregate: {
+    outOfSampleRealizedPnl: number;
+    outOfSampleWinRate: number | null;
+    outOfSampleProfitFactor: number | null;
+    outOfSampleMaxDrawdown: number;
+    outOfSampleTrades: number;
+    /** OOS pnlが非負だったウィンドウの割合(0-1)。ウィンドウ0件ならnull */
+    consistencyRatio: number | null;
+  };
+  dataStartAt?: number;
+  dataEndAt?: number;
+}
+
+export interface WalkForwardStrategyResult {
+  strategyId: string;
+  strategyName: string;
+  pair: Pair;
+  timeframe: CandleTimeframe;
+  currentParams: { stopLossPct: number | null; takeProfitPct: number | null; trailingStopPct: number | null };
+  summary: WalkForwardSummary;
+}
+
+/** POST /api/strategies/walk-forward のレスポンス */
+export interface WalkForwardBatchResponse {
+  generatedAt: number;
+  activeStrategyCount: number;
+  results: WalkForwardStrategyResult[];
+  warnings: string[];
+}
+
+// ---------------------------------------------------------------------------
 // アプリ設定・AI使用量
 // ---------------------------------------------------------------------------
 

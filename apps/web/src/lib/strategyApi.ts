@@ -5,6 +5,7 @@ import type {
   GeneratedStrategy,
   Strategy,
   StrategyGraph,
+  WalkForwardBatchResponse,
 } from "@noctas/shared";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
@@ -105,4 +106,14 @@ export async function runBacktest(input: BacktestRequest): Promise<BacktestSumma
       body: JSON.stringify(input),
     })
   );
+}
+
+/**
+ * 現在アクティブな全戦略のSL/TP/トレーリングを、ローリング3ヶ月スナップショットに対して
+ * ウォークフォワード検証する(読み取り専用。戦略の保存済み設定は一切変更しない)。
+ */
+export async function runWalkForwardValidation(): Promise<WalkForwardBatchResponse> {
+  // No request body: omit Content-Type too, since Fastify's JSON body parser rejects an
+  // empty body when the header claims application/json (FST_ERR_CTP_EMPTY_JSON_BODY).
+  return handle(await fetch(`${API_URL}/api/strategies/walk-forward`, { method: "POST" }));
 }
