@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { config } from "../config";
-import { validateRiskSettings } from "./routes";
+import { estimateThreeMonthCandleCount, validateRiskSettings } from "./routes";
 
 describe("validateRiskSettings / positionSizeJpy cap", () => {
   it("accepts a positionSizeJpy at or below the AI_MAX_POSITION_JPY cap", () => {
@@ -52,5 +52,24 @@ describe("validateRiskSettings / other fields unaffected", () => {
     expect(validateRiskSettings({ maxOpenPositions: 0 })).not.toBeNull();
     expect(validateRiskSettings({ maxOpenPositions: 1.5 })).not.toBeNull();
     expect(validateRiskSettings({ maxOpenPositions: 3 })).toBeNull();
+  });
+});
+
+describe("estimateThreeMonthCandleCount", () => {
+  it("estimates a 1min candle count that exceeds the three-month backtest cap", () => {
+    expect(estimateThreeMonthCandleCount("1min")).toBeGreaterThan(
+      config.candles.maxThreeMonthBacktestCandles
+    );
+  });
+
+  it("estimates a 5min candle count that stays within the three-month backtest cap", () => {
+    expect(estimateThreeMonthCandleCount("5min")).toBeLessThanOrEqual(
+      config.candles.maxThreeMonthBacktestCandles
+    );
+  });
+
+  it("estimates fewer candles for coarser timeframes", () => {
+    expect(estimateThreeMonthCandleCount("1day")).toBeLessThan(estimateThreeMonthCandleCount("1hour"));
+    expect(estimateThreeMonthCandleCount("1hour")).toBeLessThan(estimateThreeMonthCandleCount("1min"));
   });
 });

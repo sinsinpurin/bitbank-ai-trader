@@ -91,6 +91,14 @@ export const config = {
     // 起動時にbitbank公開RESTから取得する1分足の日数(1〜7)。
     // チャート表示と指標のウォームアップを起動直後から使えるようにする
     seedDays: Math.min(7, Math.max(1, Number(process.env.CANDLE_SEED_DAYS ?? 3))),
+    // 3ヶ月シミュレーション(period: "three_months")で許容するローソク足本数の上限。
+    // historicalCandleStore.tsのRETENTION_DAYS(90日)分の1分足(約13万本)をそのまま
+    // runBacktest()のO(n²)なevaluateGraph再計算に渡すとイベントループを数十秒単位で
+    // 占有し、他のリクエストも巻き込んでサーバー全体がハングする(issue #51)。
+    // 30,000はハードウェアで実測した値ではなく、1点のベンチマーク(約13万本で約33秒)から
+    // 概ね二乗オーダーでスケールすると仮定して逆算した経験則(約3万本 ≒ 数秒程度)。
+    // RETENTION_DAYS=90のとき、5分足(約25,920本)は許可され、1分足(約129,600本)は拒否される境界。
+    maxThreeMonthBacktestCandles: Number(process.env.BACKTEST_THREE_MONTH_MAX_CANDLES ?? 30_000),
   },
   bot: {
     // 同一戦略が連続発火するのを防ぐ最短間隔

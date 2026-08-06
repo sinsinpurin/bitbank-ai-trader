@@ -12,7 +12,7 @@ import {
 } from "@noctas/shared";
 import { prisma } from "../db/prisma";
 import { aggregateCandles, reloadActiveStrategies } from "./botEngine";
-import { getHistoricalCandles } from "./historicalCandleStore";
+import { getHistoricalCandles, RETENTION_DAYS } from "./historicalCandleStore";
 import { runBacktest } from "./backtestEngine";
 import { broadcast } from "../ws/relay";
 import { generateStrategyFromPrompt } from "../ai/strategyGenerator";
@@ -100,6 +100,11 @@ export function validateRiskSettings(body: StrategyBody): string | null {
     return "maxOpenPositions は1以上の整数またはnullで指定してください";
   }
   return null;
+}
+
+/** three_monthsシミュレーションでtimeframeごとに見積もられる想定ローソク足本数 */
+export function estimateThreeMonthCandleCount(timeframe: CandleTimeframe): number {
+  return Math.ceil((RETENTION_DAYS * 24 * 60) / minutesOfTimeframe(timeframe));
 }
 
 /** bodyに含まれるリスク設定フィールドだけをPrismaのdataへ写す */
@@ -191,6 +196,11 @@ export async function strategyRoutes(app: FastifyInstance) {
     }
     if (period !== "loaded" && period !== "three_months") {
       return reply.status(400).send({ error: `unsupported backtest period: ${period}` });
+    }
+    if (period === "three_months" && estimateThreeMonthCandleCount(timeframe) > config.candles.maxThreeMonthBacktestCandles) {
+      return reply.status(400).send({
+        error: `3ヶ月シミュレーションはこの時間足では候補データが多すぎるため実行できません(約${estimateThreeMonthCandleCount(timeframe).toLocaleString("ja-JP")}本 > 上限${config.candles.maxThreeMonthBacktestCandles.toLocaleString("ja-JP")}本)。Run Backtest(Loaded History)をお試しください。`,
+      });
     }
     const riskError = validateRiskSettings(request.body ?? {});
     if (riskError) {
