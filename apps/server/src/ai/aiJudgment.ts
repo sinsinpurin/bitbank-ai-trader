@@ -4,7 +4,13 @@ import { prisma } from "../db/prisma";
 import { broadcast } from "../ws/relay";
 import { config } from "../config";
 import { estimateCostJpy } from "./pricing";
-import { latestValue, rsi, sma, type AiJudgment, type AiUsageStats } from "@noctas/shared";
+import { getCircuitBreakerStatus, isBuyHalted } from "../trading/circuitBreaker";
+import { latestValue, rsi, sma, stddev, type AiJudgment, type AiUsageStats } from "@noctas/shared";
+// botEngine.tsは既に "./ai/aiJudgment" から getJudgment/setWatchedPairs をトップレベルでimportしており、
+// ここでの逆方向importは循環参照になる。関数内(refreshPair)でのみ使うのでバインディングの解決自体は
+// 問題ないが(pnl/summary.ts・trading/routes.tsも同じgetCandleHistoryに依存する既存パターン)、
+// 変更時は必ず npm run dev:server で起動確認すること(循環import由来の問題は黙ってundefinedになりうる)。
+import { getCandleHistory } from "../strategy/botEngine";
 
 /**
  * Bot Blueprintの「AI Judgment」ノードへ供給する、ペアごとの最新AI判断キャッシュ。
@@ -118,11 +124,48 @@ async function refreshPair(pair: string, now: number) {
   const last = hist[hist.length - 1];
   if (!shouldCallNow(pair, last, now)) return;
 
-  const indicators = {
-    sma5: latestValue(sma(hist, 5)),
-    sma20: latestValue(sma(hist, 20)),
-    rsi14: latestValue(rsi(hist, 14)),
-  };
+  // 指標は1分足の確定クローズ系列(botEngine.tsのgetCandleHistory。config.candles.seedDays分で
+  // シード済み・onTickで同期される)から計算する。recentPrices/high24h等のtickベースのpriceHistoryとは
+  // 別系列だが、どちらも直近の相場を表す点は同じなのでスナップショットとしては両方渡す。
+  const closes = getCandleHistory(pair).map((c) => c.close);
+  const rsi14 = latestValue(rsi(closes, 14));
+  const sma20 = latestValue(sma(closes, 20));
+  const stddev20 = latestValue(stddev(closes, 20));
+  const smaDeviationPct =
+    sma20 === null ? null : ((closes[closes.length - 1] - sma20) / sma20) * 100;
+  // ボラティリティはstddev20をsma20(同一ウィンドウの平均)で正規化した変動係数(%)。
+  // 分母にlastではなくsma20を使うのは、直近1本の外れ値にボラティリティ表示自体が
+  // 引きずられるのを避けるため。
+  const volatilityPct =
+    sma20 === null || stddev20 === null ? null : (stddev20 / sma20) * 100;
+
+  const indicators = { rsi14, smaDeviationPct, volatilityPct };
+
+  // 対象ペアで現在保有中のbuyポジション(pnl/summary.tsのopenRowsクエリと同じ形)
+  const openPositions = await prisma.position.findMany({
+    where: { pair, side: "buy", closedAt: null },
+  });
+  const openCount = openPositions.length;
+  const hasOpenPosition = openCount > 0;
+  let unrealizedPnlJpy: number | null = null;
+  let unrealizedPnlPct: number | null = null;
+  if (hasOpenPosition) {
+    // pnl/summary.tsと同じ (現在値 - entryPrice) * amount 方式で建玉ごとの含み損益を合算する
+    // (ただし現在値はpnl/summary.tsのローソク足終値ではなく、ここではtickerの直近値lastを使う。
+    // プロンプトへの参考情報であり、ダッシュボードのPnLと1円単位で一致させる必要はないため)。
+    // %損益は複数ポジションがある場合、投下元本(entryPrice*amount)で加重平均する
+    // (単純平均だと小さいポジションの極端な%変動に引っ張られてしまうため)。
+    let totalPnlJpy = 0;
+    let totalCostJpy = 0;
+    for (const pos of openPositions) {
+      totalPnlJpy += (last - pos.entryPrice) * pos.amount;
+      totalCostJpy += pos.entryPrice * pos.amount;
+    }
+    unrealizedPnlJpy = totalPnlJpy;
+    unrealizedPnlPct = totalCostJpy > 0 ? (totalPnlJpy / totalCostJpy) * 100 : null;
+  }
+
+  const cbStatus = getCircuitBreakerStatus();
 
   const snapshot: MarketSnapshot = {
     pair,
@@ -132,6 +175,16 @@ async function refreshPair(pair: string, now: number) {
     vol24h: latestVol.get(pair) ?? 0,
     recentPrices: [...hist],
     indicators,
+    position: {
+      hasOpenPosition,
+      openCount,
+      unrealizedPnlJpy,
+      unrealizedPnlPct,
+    },
+    circuitBreaker: {
+      buyHalted: isBuyHalted(),
+      reason: cbStatus.reason,
+    },
   };
 
   const decision = await getAiDecision(snapshot);

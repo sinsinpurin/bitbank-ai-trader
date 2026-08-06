@@ -11,9 +11,19 @@ export interface MarketSnapshot {
   vol24h: number;
   recentPrices: number[]; // 直近の価格推移(古い順)
   indicators: {
-    sma5: number | null;
-    sma20: number | null;
     rsi14: number | null;
+    smaDeviationPct: number | null; // (last - sma20) / sma20 * 100
+    volatilityPct: number | null; // stddev20 / sma20 * 100(算出方法はaiJudgment.ts参照)
+  };
+  position: {
+    hasOpenPosition: boolean;
+    openCount: number;
+    unrealizedPnlJpy: number | null; // ポジションなしはnull
+    unrealizedPnlPct: number | null;
+  };
+  circuitBreaker: {
+    buyHalted: boolean;
+    reason: string | null;
   };
 }
 
@@ -52,6 +62,28 @@ const DECISION_TOOL = {
   },
 };
 
+/** null安全にパーセント表記のインジケーター値を整形する(データ不足はそれと分かる自然な日本語にする) */
+function formatIndicatorPct(value: number | null): string {
+  return value === null ? "データ不足のため算出不可" : `${value.toFixed(2)}%`;
+}
+
+/** 保有ポジションの文脈を1行の日本語に整形する */
+function formatPositionContext(position: MarketSnapshot["position"]): string {
+  if (!position.hasOpenPosition) return "なし";
+  const pnlJpy = position.unrealizedPnlJpy;
+  const pnlPct = position.unrealizedPnlPct;
+  const pnlJpyLabel =
+    pnlJpy === null ? "算出不可" : `${pnlJpy >= 0 ? "+" : "-"}¥${Math.abs(Math.round(pnlJpy)).toLocaleString("ja-JP")}`;
+  const pnlPctLabel = pnlPct === null ? "算出不可" : `${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(2)}%`;
+  return `あり(${position.openCount}件, 含み損益 ${pnlJpyLabel} / ${pnlPctLabel})`;
+}
+
+/** サーキットブレーカーの発動状態を1行の日本語に整形する */
+function formatCircuitBreaker(circuitBreaker: MarketSnapshot["circuitBreaker"]): string {
+  if (!circuitBreaker.buyHalted) return "平常";
+  return `発動中(${circuitBreaker.reason ?? "理由不明"})`;
+}
+
 /**
  * 相場スナップショットをClaudeに渡し、構造化された売買判断を取得する。
  * ここではペーパートレード用の判断のみを生成し、実際の注文は行わない。
@@ -75,9 +107,11 @@ export async function getAiDecision(
 24時間安値: ${snapshot.low24h}
 24時間出来高: ${snapshot.vol24h}
 直近価格推移(古い順): ${snapshot.recentPrices.join(", ")}
-SMA(5): ${snapshot.indicators.sma5?.toFixed(2) ?? "データ不足のため算出不可"}
-SMA(20): ${snapshot.indicators.sma20?.toFixed(2) ?? "データ不足のため算出不可"}
 RSI(14): ${snapshot.indicators.rsi14?.toFixed(2) ?? "データ不足のため算出不可"}
+移動平均(20)からの乖離率: ${formatIndicatorPct(snapshot.indicators.smaDeviationPct)}
+ボラティリティ(20): ${formatIndicatorPct(snapshot.indicators.volatilityPct)}
+保有ポジション: ${formatPositionContext(snapshot.position)}
+サーキットブレーカー: ${formatCircuitBreaker(snapshot.circuitBreaker)}
 
 submit_trading_decision ツールで結果を返してください。`,
       },
