@@ -32,7 +32,12 @@ interface OpenSimPosition {
   highestPrice: number;
 }
 
-function emptySummary(candleCount: number, warnings: string[]): BacktestSummary {
+function emptySummary(
+  candleCount: number,
+  warnings: string[],
+  period: BacktestSummary["period"],
+  candles: CandleBucket[]
+): BacktestSummary {
   return {
     candleCount,
     warnings,
@@ -49,6 +54,9 @@ function emptySummary(candleCount: number, warnings: string[]): BacktestSummary 
     feeLossCount: 0,
     equityCurve: [],
     trades: [],
+    period,
+    dataStartAt: candles[0]?.time,
+    dataEndAt: candles[candles.length - 1]?.time,
   };
 }
 
@@ -128,8 +136,9 @@ function openSimPosition(marketPrice: number, sizeJpy: number, openedAtMs: numbe
   return { entryPrice: execPrice, amount, entryFee, openedAt: openedAtMs, highestPrice: execPrice };
 }
 
-export function runBacktest(request: BacktestRequest): BacktestSummary {
+export function runBacktest(request: BacktestRequest, candlesOverride?: CandleBucket[]): BacktestSummary {
   const warnings: string[] = [];
+  const period = request.period ?? "loaded";
   if (request.graph.nodes.some((n) => n.type === "ai_judgment")) {
     warnings.push(
       "このグラフには AI Judgment ノードが含まれています。過去のAI判断ログは保存されていないため再現できず、" +
@@ -137,11 +146,11 @@ export function runBacktest(request: BacktestRequest): BacktestSummary {
     );
   }
 
-  const candles = getCandlesForTimeframe(request.pair, request.timeframe);
+  const candles = candlesOverride ?? getCandlesForTimeframe(request.pair, request.timeframe);
   const candleCount = candles.length;
   if (candleCount < 2) {
     warnings.push("ローソク足データが不足しているため、バックテストを実行できませんでした(最低2本必要)。");
-    return emptySummary(candleCount, warnings);
+    return emptySummary(candleCount, warnings, period, candles);
   }
 
   const positionSizeJpy = Math.min(
@@ -257,5 +266,8 @@ export function runBacktest(request: BacktestRequest): BacktestSummary {
     feeLossCount,
     equityCurve,
     trades,
+    period,
+    dataStartAt: candles[0]?.time,
+    dataEndAt: candles[candles.length - 1]?.time,
   };
 }

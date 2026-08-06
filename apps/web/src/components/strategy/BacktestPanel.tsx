@@ -2,7 +2,14 @@
 
 import { useCallback, useState } from "react";
 import { Box, SimpleGrid, Stack, Text } from "@chakra-ui/react";
-import type { BacktestRequest, BacktestSummary, CandleTimeframe, Pair, StrategyGraph } from "@noctas/shared";
+import type {
+  BacktestPeriod,
+  BacktestRequest,
+  BacktestSummary,
+  CandleTimeframe,
+  Pair,
+  StrategyGraph,
+} from "@noctas/shared";
 import { CyberButton } from "@/components/ui/CyberButton";
 import { EquityCurveChart } from "@/components/pnl/EquityCurveChart";
 import { formatDateTime, formatJpy, formatSignedJpy, pnlColor } from "@/components/pnl/format";
@@ -62,10 +69,11 @@ const REASON_LABEL: Record<string, string> = {
  */
 export function BacktestPanel({ graph, pair, timeframe, riskForm, maxPositionJpy }: BacktestPanelProps) {
   const [loading, setLoading] = useState(false);
+  const [runningPeriod, setRunningPeriod] = useState<BacktestPeriod | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<BacktestSummary | null>(null);
 
-  const handleRun = useCallback(async () => {
+  const handleRun = useCallback(async (period: BacktestPeriod) => {
     setError(null);
     const hasAction = graph.nodes.some((n) => n.type === "buy" || n.type === "sell");
     if (!hasAction) {
@@ -78,8 +86,9 @@ export function BacktestPanel({ graph, pair, timeframe, riskForm, maxPositionJpy
       return;
     }
     setLoading(true);
+    setRunningPeriod(period);
     try {
-      const request: BacktestRequest = { graph, pair, timeframe, ...risk.value };
+      const request: BacktestRequest = { graph, pair, timeframe, period, ...risk.value };
       const result = await runBacktest(request);
       setSummary(result);
     } catch (err) {
@@ -87,17 +96,21 @@ export function BacktestPanel({ graph, pair, timeframe, riskForm, maxPositionJpy
       setError(err instanceof Error ? err.message : "バックテストの実行に失敗しました");
     } finally {
       setLoading(false);
+      setRunningPeriod(null);
     }
   }, [graph, pair, timeframe, riskForm, maxPositionJpy]);
 
   return (
     <Stack gap={4}>
       <Stack direction="row" gap={3} align="center" flexWrap="wrap">
-        <CyberButton variant="primary" onClick={handleRun} disabled={loading}>
-          {loading ? "Running..." : "Run Backtest"}
+        <CyberButton variant="primary" onClick={() => handleRun("loaded")} disabled={loading}>
+          {loading && runningPeriod === "loaded" ? "Running..." : "Run Backtest"}
+        </CyberButton>
+        <CyberButton variant="secondary" onClick={() => handleRun("three_months")} disabled={loading}>
+          {loading && runningPeriod === "three_months" ? "Loading 3 months..." : "Run 3-Month Simulation"}
         </CyberButton>
         <Text fontFamily="mono" fontSize="10px" color="text.disabled">
-          保存前のキャンバスの内容をそのまま、サーバーが保持する過去ローソク足履歴で再生します(読み取り専用・保存なし)
+          Backtest uses the live cache. 3-month simulation reads the rolling 90-day DB snapshot.
         </Text>
       </Stack>
 
@@ -125,7 +138,7 @@ export function BacktestPanel({ graph, pair, timeframe, riskForm, maxPositionJpy
               label="Realized P&L"
               value={formatSignedJpy(summary.realizedPnl)}
               valueColor={pnlColor(summary.realizedPnl)}
-              sub={`${summary.candleCount}本のローソク足で再生`}
+              sub={`${summary.candleCount} candles / ${summary.period === "three_months" ? "latest 3 months" : "loaded history"}`}
             />
             <Tile
               label="Trades"

@@ -181,7 +181,7 @@ export function getCandleHistory(pair: string): CandleBucket[] {
 }
 
 /** 1分足を指定分数のバケットへ集計する(末尾バケットは形成中でも良い) */
-function aggregateCandles(source: CandleBucket[], minutes: number): CandleBucket[] {
+export function aggregateCandles(source: CandleBucket[], minutes: number): CandleBucket[] {
   if (minutes <= 1) return source;
   const bucketSeconds = minutes * 60;
   const result: CandleBucket[] = [];
@@ -221,6 +221,73 @@ export function getCandlesForTimeframe(pair: string, timeframe: CandleTimeframe)
   return aggregated.length > MAX_RESPONSE_CANDLES
     ? aggregated.slice(-MAX_RESPONSE_CANDLES)
     : aggregated;
+}
+
+export interface HistoricalFetchResult {
+  candles: CandleBucket[];
+  /** True only if every requested day's request succeeded (no silently-dropped days). */
+  complete: boolean;
+}
+
+/**
+ * Fetch a longer, point-in-time history for an explicit historical simulation.
+ * This deliberately does not modify the live candle store: the live bot only
+ * needs its small warm-up cache, while the 3-month simulation needs every
+ * available candle (including more than the UI response limit).
+ */
+export async function fetchHistoricalCandles(pair: string, days: number): Promise<HistoricalFetchResult> {
+  const requestedDays = Math.min(90, Math.max(1, Math.floor(days)));
+  const offsets = Array.from({ length: requestedDays + 1 }, (_, i) => i - requestedDays);
+  const candles: CandleBucket[] = [];
+  let failedDays = 0;
+
+  // Keep a small concurrency window so an explicit simulation does not create
+  // an unnecessary burst against the public exchange endpoint.
+  for (let start = 0; start < offsets.length; start += 8) {
+    const batch = offsets.slice(start, start + 8);
+    const responses = await Promise.all(
+      batch.map(async (offset) => {
+        try {
+          const date = jstDateLabel(offset);
+          const res = await fetch(`https://public.bitbank.cc/${pair}/candlestick/1min/${date}`);
+          if (!res.ok) return null;
+          const json = (await res.json()) as CandlestickResponse;
+          return json.success === 1 ? json : null;
+        } catch {
+          return null;
+        }
+      })
+    );
+
+    for (const json of responses) {
+      if (!json) {
+        // A day whose request failed (network error, non-2xx, bad payload) is
+        // simply missing from `candles`. The caller must not treat the result
+        // as a complete replacement for the requested window in that case.
+        failedDays += 1;
+        continue;
+      }
+      for (const entry of json.data.candlestick) {
+        for (const [open, high, low, close, volume, ts] of entry.ohlcv) {
+          candles.push({
+            time: Math.floor(ts / 1000 / 60) * 60,
+            open: Number(open),
+            high: Number(high),
+            low: Number(low),
+            close: Number(close),
+            volume: Number(volume),
+          });
+        }
+      }
+    }
+  }
+
+  const unique = new Map<number, CandleBucket>();
+  for (const candle of candles) unique.set(candle.time, candle);
+  return {
+    candles: [...unique.values()].sort((a, b) => a.time - b.time),
+    complete: failedDays === 0,
+  };
 }
 
 /** DBからアクティブ戦略を読み直す。戦略の作成・更新・有効化時に呼ぶ */
