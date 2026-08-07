@@ -9,11 +9,14 @@ import {
   type CandleTimeframe,
   type Strategy,
   type StrategyGraph,
+  type WalkForwardBatchResponse,
+  type WalkForwardStrategyResult,
 } from "@noctas/shared";
 import { prisma } from "../db/prisma";
-import { aggregateCandles, reloadActiveStrategies } from "./botEngine";
+import { aggregateCandles, reloadActiveStrategies, type CandleBucket } from "./botEngine";
 import { getHistoricalCandles } from "./historicalCandleStore";
 import { runBacktest, THREE_MONTH_BACKTEST_MAX_CANDLES } from "./backtestEngine";
+import { maxWindowsForBatch, runWalkForwardForStrategy } from "./walkForwardEngine";
 import { broadcast } from "../ws/relay";
 import { generateStrategyFromPrompt } from "../ai/strategyGenerator";
 import { getAnthropicApiKey } from "../ai/anthropicClient";
@@ -217,6 +220,109 @@ export async function strategyRoutes(app: FastifyInstance) {
         error: err instanceof Error ? err.message : "バックテストの実行に失敗しました",
       });
     }
+  });
+
+  // 現在アクティブな全戦略のSL/TP/トレーリングを、ローリング3ヶ月スナップショットに対して
+  // ウォークフォワード検証する読み取り専用エンドポイント。戦略の保存済み設定は一切変更しない。
+  app.post("/api/strategies/walk-forward", async (request, reply) => {
+    const rows = await prisma.strategy.findMany({ where: { isActive: true } });
+    if (rows.length === 0) {
+      const body: WalkForwardBatchResponse = {
+        generatedAt: Date.now(),
+        activeStrategyCount: 0,
+        results: [],
+        warnings: ["現在アクティブな戦略がありません。"],
+      };
+      return body;
+    }
+
+    const warnings: string[] = [];
+    const maxWindows = maxWindowsForBatch(rows.length);
+    // ペア単位の生の1分足スナップショットと、pair+timeframe単位の集計結果を
+    // このリクエスト内でキャッシュし、同じ組み合わせを複数戦略が使っていても再取得・再集計しない
+    const rawCandleCache = new Map<string, Promise<CandleBucket[]>>();
+    const aggregatedCache = new Map<string, CandleBucket[]>();
+    const results: WalkForwardStrategyResult[] = [];
+
+    for (const row of rows) {
+      const graph = parseGraph(row.graph);
+      if (!graph) {
+        warnings.push(`戦略 "${row.name}" のグラフをパースできないためスキップしました。`);
+        continue;
+      }
+      if (!isValidPair(row.pair)) {
+        warnings.push(`戦略 "${row.name}" のペア ${row.pair} は対象外のためスキップしました。`);
+        continue;
+      }
+      if (!isCandleTimeframe(row.timeframe)) {
+        warnings.push(`戦略 "${row.name}" の時間足 ${row.timeframe} は不正なためスキップしました。`);
+        continue;
+      }
+      const timeframe = row.timeframe;
+
+      try {
+        let rawPromise = rawCandleCache.get(row.pair);
+        if (!rawPromise) {
+          rawPromise = getHistoricalCandles(row.pair);
+          rawCandleCache.set(row.pair, rawPromise);
+        }
+        const raw = await rawPromise;
+
+        const key = `${row.pair}|${timeframe}`;
+        let candles = aggregatedCache.get(key);
+        if (!candles) {
+          candles = aggregateCandles(raw, minutesOfTimeframe(timeframe));
+          aggregatedCache.set(key, candles);
+        }
+
+        const positionSizeJpy = Math.min(
+          row.positionSizeJpy ?? config.risk.maxPositionJpy,
+          config.risk.maxPositionJpy
+        );
+        const maxOpenPositions = row.maxOpenPositions ?? config.risk.maxOpenPositions;
+
+        const summary = runWalkForwardForStrategy(
+          graph,
+          row.pair,
+          timeframe,
+          positionSizeJpy,
+          maxOpenPositions,
+          candles,
+          maxWindows
+        );
+
+        if (summary.windowCount === 0) {
+          warnings.push(
+            `戦略 "${row.name}" (${row.pair} / ${timeframe}) はローソク足スナップショットが不足しているため検証をスキップしました。`
+          );
+          continue;
+        }
+
+        results.push({
+          strategyId: row.id,
+          strategyName: row.name,
+          pair: row.pair,
+          timeframe,
+          currentParams: {
+            stopLossPct: row.stopLossPct,
+            takeProfitPct: row.takeProfitPct,
+            trailingStopPct: row.trailingStopPct,
+          },
+          summary,
+        });
+      } catch (err) {
+        request.log.error(err, `戦略 "${row.name}" のウォークフォワード検証に失敗しました`);
+        warnings.push(`戦略 "${row.name}" のウォークフォワード検証中にエラーが発生しました。`);
+      }
+    }
+
+    const body: WalkForwardBatchResponse = {
+      generatedAt: Date.now(),
+      activeStrategyCount: rows.length,
+      results,
+      warnings,
+    };
+    return body;
   });
 
   app.post<{ Body: StrategyBody }>("/api/strategies", async (request, reply) => {

@@ -489,6 +489,39 @@ export default function DocsPage() {
                   この場合は5分足以上の粗い時間足を選択してください。
                 </Note>
 
+                <SubHeading>Walk-Forward Validation(アクティブ戦略の過学習チェック)</SubHeading>
+                <P>
+                  Bot Blueprintエディタの「Backtest」パネル下部にある「Walk-Forward Validation」
+                  セクションで <Mono>Run Walk-Forward Validation</Mono> を押すと、
+                  <Box as="span" color="signal.yellow">現在アクティブな全戦略</Box>
+                  の損切り/利確/トレーリングストップを、ローリング90日スナップショット
+                  (「3ヶ月シミュレーション」と同じDB上のデータ)に対して複数のウィンドウへ分割し、
+                  過学習していないかを検証します。各ウィンドウは
+                  in-sample(直近側でSL/TP/トレーリングの組み合わせをグリッドサーチして最良のものを選ぶ区間)と、
+                  それに続く out-of-sample(選んだパラメータをそのまま未見のデータで再生する区間)の
+                  組で構成され、非重複のout-of-sample区間で時系列を前方へタイル状に敷き詰めます。
+                  <Box as="span" color="signal.yellow">
+                    この検証結果を戦略の保存済み設定へ反映するボタンはありません
+                  </Box>
+                  — 数値はあくまで参考情報で、SL/TP/トレーリング等を変更したい場合はエディタの
+                  Risk Settingsから手動で保存してください。
+                </P>
+                <P>
+                  グリッドサーチの探索対象は損切り%・利確%・トレーリング%の組み合わせのみで、
+                  投入額・最大ポジション数・戦略グラフ自体のノードパラメータ(SMA/RSIの期間等)は
+                  対象外です。集計タイルの「Consistency」は out-of-sample の損益が0以上だった
+                  ウィンドウの割合、「OOS Profit Factor」等は全ウィンドウの out-of-sample トレードを
+                  合算して算出しています。
+                </P>
+                <Note tone="orange">
+                  バックテストと同じくrunBacktest自体は足数に対してO(n²)の計算量になるため、
+                  1ウィンドウあたりの足数には上限があります。既定の時間足(1分足)ではこの上限により
+                  ウィンドウが意図した日数(in-sample約25日・out-of-sample約8日)より短くなり、
+                  実際には数日分程度しかカバーしないことがあります。その場合は結果に警告として表示されます。
+                  また、1回のリクエストでアクティブな全戦略をまとめて検証するため、戦略数が多いほど
+                  1戦略あたりのウィンドウ上限が自動的に縮小されます。
+                </Note>
+
                 <SubHeading>ノードリファレンス</SubHeading>
                 <NodeReference />
               </Stack>

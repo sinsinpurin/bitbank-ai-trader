@@ -9,11 +9,12 @@ import type {
   CandleTimeframe,
   Pair,
   StrategyGraph,
+  WalkForwardBatchResponse,
 } from "@noctas/shared";
 import { CyberButton } from "@/components/ui/CyberButton";
 import { EquityCurveChart } from "@/components/pnl/EquityCurveChart";
 import { formatDateTime, formatJpy, formatSignedJpy, pnlColor } from "@/components/pnl/format";
-import { runBacktest } from "@/lib/strategyApi";
+import { runBacktest, runWalkForwardValidation } from "@/lib/strategyApi";
 import { riskFormToInput, type RiskFormValues } from "@/components/strategy/RiskSettingsPanel";
 
 interface BacktestPanelProps {
@@ -208,6 +209,220 @@ export function BacktestPanel({ graph, pair, timeframe, riskForm, maxPositionJpy
           )}
         </Stack>
       )}
+
+      <Box borderTopWidth="1px" borderColor="border.grid" pt={4}>
+        <WalkForwardSection />
+      </Box>
+    </Stack>
+  );
+}
+
+function formatPct(value: number | null): string {
+  return value === null ? "--" : `${value}%`;
+}
+
+/**
+ * 現在アクティブな全戦略(BacktestPanelが受け取るgraph/pair/timeframe propsとは無関係)の
+ * SL/TP/トレーリングストップを、ローリング3ヶ月スナップショットに対して複数ウィンドウで
+ * ウォークフォワード検証する読み取り専用セクション。戦略の保存済み設定は一切変更しない。
+ */
+function WalkForwardSection() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<WalkForwardBatchResponse | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const handleRun = useCallback(async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await runWalkForwardValidation();
+      setResult(res);
+    } catch (err) {
+      setResult(null);
+      setError(err instanceof Error ? err.message : "Walk-Forward Validationの実行に失敗しました");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const toggleExpanded = useCallback((id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  return (
+    <Stack gap={4}>
+      <Stack gap={1}>
+        <Text
+          fontFamily="heading"
+          fontSize="sm"
+          fontWeight="700"
+          letterSpacing="0.08em"
+          textTransform="uppercase"
+          color="text.primary"
+        >
+          Walk-Forward Validation
+        </Text>
+        <Text fontFamily="mono" fontSize="11px" color="text.secondary" lineHeight="1.7">
+          現在アクティブな全戦略の損切り/利確/トレーリングストップを、90日分のローリングスナップショットを
+          複数のin-sample(最適化用)/out-of-sample(検証用)ウィンドウに分けて検証します(過学習チェック)。
+          戦略の保存済み設定は一切変更しません — あくまで参考情報の表示です。
+        </Text>
+      </Stack>
+
+      <Stack direction="row" gap={3} align="center" flexWrap="wrap">
+        <CyberButton variant="primary" onClick={handleRun} disabled={loading}>
+          {loading ? "Running..." : "Run Walk-Forward Validation"}
+        </CyberButton>
+      </Stack>
+
+      {error && (
+        <Text fontFamily="mono" fontSize="11px" color="signal.red">
+          {error}
+        </Text>
+      )}
+
+      {result && result.warnings.length > 0 && (
+        <Stack gap={1} borderWidth="1px" borderColor="signal.orange" bg="bg.surfaceRaised" px={3} py={2}>
+          {result.warnings.map((warning, i) => (
+            <Text key={i} fontFamily="mono" fontSize="11px" color="signal.orange">
+              {"⚠ "}
+              {warning}
+            </Text>
+          ))}
+        </Stack>
+      )}
+
+      {result && result.results.length === 0 && result.activeStrategyCount === 0 && (
+        <Text fontFamily="mono" fontSize="12px" color="text.secondary">
+          現在アクティブな戦略がありません。
+        </Text>
+      )}
+
+      {result &&
+        result.results.map((r) => {
+          const isOpen = expanded.has(r.strategyId);
+          const agg = r.summary.aggregate;
+          return (
+            <Box key={r.strategyId} borderWidth="1px" borderColor="border.grid" bg="bg.surfaceRaised" p={3}>
+              <Stack gap={3}>
+                <Stack direction="row" justify="space-between" align="flex-start" flexWrap="wrap" gap={2}>
+                  <Stack gap={0.5}>
+                    <Text fontFamily="heading" fontSize="13px" fontWeight="700" color="text.primary">
+                      {r.strategyName}
+                    </Text>
+                    <Text fontFamily="mono" fontSize="11px" color="text.secondary">
+                      {r.pair} / {r.timeframe} / {r.summary.windowCount}ウィンドウ
+                    </Text>
+                  </Stack>
+                  <Stack gap={0.5} align="flex-end">
+                    <Text
+                      fontFamily="mono"
+                      fontSize="10px"
+                      color="text.disabled"
+                      textTransform="uppercase"
+                      letterSpacing="0.08em"
+                    >
+                      現在の設定 (SL/TP/TS)
+                    </Text>
+                    <Text fontFamily="mono" fontSize="12px" color="text.primary">
+                      {formatPct(r.currentParams.stopLossPct)} / {formatPct(r.currentParams.takeProfitPct)} /{" "}
+                      {formatPct(r.currentParams.trailingStopPct)}
+                    </Text>
+                  </Stack>
+                </Stack>
+
+                {r.summary.warnings.length > 0 && (
+                  <Stack gap={1}>
+                    {r.summary.warnings.map((w, i) => (
+                      <Text key={i} fontFamily="mono" fontSize="10px" color="signal.orange">
+                        {"⚠ "}
+                        {w}
+                      </Text>
+                    ))}
+                  </Stack>
+                )}
+
+                <SimpleGrid columns={{ base: 2, md: 5 }} gap={2}>
+                  <Tile
+                    label="OOS Realized P&L"
+                    value={formatSignedJpy(agg.outOfSampleRealizedPnl)}
+                    valueColor={pnlColor(agg.outOfSampleRealizedPnl)}
+                  />
+                  <Tile
+                    label="OOS Win Rate"
+                    value={agg.outOfSampleWinRate === null ? "--" : `${(agg.outOfSampleWinRate * 100).toFixed(1)}%`}
+                  />
+                  <Tile
+                    label="OOS Profit Factor"
+                    value={agg.outOfSampleProfitFactor === null ? "--" : agg.outOfSampleProfitFactor.toFixed(2)}
+                  />
+                  <Tile label="OOS Max Drawdown" value={formatJpy(agg.outOfSampleMaxDrawdown)} />
+                  <Tile
+                    label="Consistency"
+                    value={agg.consistencyRatio === null ? "--" : `${(agg.consistencyRatio * 100).toFixed(0)}%`}
+                    sub={`${agg.outOfSampleTrades}件のOOSトレード`}
+                  />
+                </SimpleGrid>
+
+                <CyberButton
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => toggleExpanded(r.strategyId)}
+                  alignSelf="flex-start"
+                >
+                  {isOpen ? "Hide windows ▲" : `Show ${r.summary.windowCount} windows ▼`}
+                </CyberButton>
+
+                {isOpen && (
+                  <Box overflowX="auto">
+                    <Box minWidth="680px" maxHeight="260px" overflowY="auto">
+                      {r.summary.windows.map((w) => (
+                        <Stack
+                          key={w.windowIndex}
+                          direction="row"
+                          gap={4}
+                          px={3}
+                          py={2}
+                          bg="bg.surface"
+                          borderBottomWidth="1px"
+                          borderBottomColor="border.grid"
+                          align="center"
+                          flexWrap="wrap"
+                        >
+                          <Text fontFamily="mono" fontSize="10px" color="text.disabled" minW="30px">
+                            #{w.windowIndex}
+                          </Text>
+                          <Text fontFamily="mono" fontSize="10px" color="text.secondary" minW="180px">
+                            IS {formatDateTime(w.inSampleStart)} → {formatDateTime(w.inSampleEnd)}
+                          </Text>
+                          <Text fontFamily="mono" fontSize="10px" color="text.secondary" minW="180px">
+                            OOS {formatDateTime(w.outOfSampleStart)} → {formatDateTime(w.outOfSampleEnd)}
+                          </Text>
+                          <Text fontFamily="mono" fontSize="10px" color="text.primary" minW="170px">
+                            SL {formatPct(w.bestParams.stopLossPct)} / TP {formatPct(w.bestParams.takeProfitPct)} / TS{" "}
+                            {formatPct(w.bestParams.trailingStopPct)}
+                          </Text>
+                          <Text fontFamily="mono" fontSize="10px" color="text.secondary" minW="100px">
+                            IS {formatSignedJpy(w.inSample.realizedPnl)}
+                          </Text>
+                          <Text fontFamily="mono" fontSize="10px" color={pnlColor(w.outOfSample.realizedPnl)} minW="100px">
+                            OOS {formatSignedJpy(w.outOfSample.realizedPnl)}
+                          </Text>
+                        </Stack>
+                      ))}
+                    </Box>
+                  </Box>
+                )}
+              </Stack>
+            </Box>
+          );
+        })}
     </Stack>
   );
 }
