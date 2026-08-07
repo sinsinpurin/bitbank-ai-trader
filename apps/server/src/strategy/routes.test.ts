@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import Fastify from "fastify";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WalkForwardSummary } from "@noctas/shared";
 import { config } from "../config";
 import type { CandleBucket } from "./botEngine";
@@ -11,6 +11,9 @@ const strategyFindMany = vi.fn();
 vi.mock("../db/prisma", () => ({
   prisma: { strategy: { findMany: (...args: unknown[]) => strategyFindMany(...args) } },
 }));
+vi.mock("../ws/relay", () => ({ broadcast: vi.fn() }));
+vi.mock("../ai/strategyGenerator", () => ({ generateStrategyFromPrompt: vi.fn() }));
+vi.mock("../ai/anthropicClient", () => ({ getAnthropicApiKey: vi.fn(() => "test-key") }));
 
 const getHistoricalCandles = vi.fn<(pair: string) => Promise<CandleBucket[]>>();
 vi.mock("./historicalCandleStore", () => ({
@@ -29,6 +32,18 @@ vi.mock("./botEngine", () => ({
   reloadActiveStrategies: (...args: unknown[]) => reloadActiveStrategies(...args),
 }));
 
+// runBacktest itself is stubbed out (its own O(n²) behavior/correctness is covered by
+// backtestEngine.test.ts); THREE_MONTH_BACKTEST_MAX_CANDLES is imported for real from the actual
+// module so the test asserts against the same threshold routes.ts enforces, not a duplicated copy.
+const runBacktest = vi.fn();
+vi.mock("./backtestEngine", async () => {
+  const actual = await vi.importActual<typeof import("./backtestEngine")>("./backtestEngine");
+  return {
+    ...actual,
+    runBacktest: (...args: unknown[]) => runBacktest(...args),
+  };
+});
+
 // runWalkForwardForStrategy自体の正しさ(ウィンドウ分割・グリッドサーチ・集計)は
 // walkForwardEngine.test.tsでカバーする。ここではルート側の責務(戦略の取得・検証・
 // スキップ判定・キャッシュ・警告集約)だけを見る
@@ -40,6 +55,7 @@ vi.mock("./walkForwardEngine", () => ({
 }));
 
 const { validateRiskSettings, strategyRoutes } = await import("./routes");
+const { THREE_MONTH_BACKTEST_MAX_CANDLES } = await import("./backtestEngine");
 
 function candle(time: number): CandleBucket {
   return { time, open: 1, high: 1, low: 1, close: 1, volume: 1 };
@@ -47,6 +63,13 @@ function candle(time: number): CandleBucket {
 
 function candles(count: number): CandleBucket[] {
   return Array.from({ length: count }, (_, i) => candle(i * 60));
+}
+
+function basicGraph() {
+  return {
+    nodes: [{ id: "buy1", type: "buy", params: {}, position: { x: 0, y: 0 } }],
+    edges: [],
+  };
 }
 
 const sufficientSummary: WalkForwardSummary = {
@@ -153,11 +176,97 @@ describe("validateRiskSettings / other fields unaffected", () => {
   });
 });
 
+describe("POST /api/strategies/backtest (period: three_months) / candle count guard", () => {
+  beforeEach(() => {
+    aggregateCandles.mockClear();
+    reloadActiveStrategies.mockReset();
+    getHistoricalCandles.mockReset();
+    runBacktest.mockReset();
+    getHistoricalCandles.mockResolvedValue([]);
+  });
+
+  it("rejects with 400 and never calls runBacktest when the aggregated candle count exceeds the threshold (e.g. 1min)", async () => {
+    aggregateCandles.mockReturnValue(candles(THREE_MONTH_BACKTEST_MAX_CANDLES + 1));
+    const app = await buildApp();
+    try {
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/strategies/backtest",
+        payload: { graph: basicGraph(), pair: config.targetPair, timeframe: "1min", period: "three_months" },
+      });
+
+      expect(res.statusCode).toBe(400);
+      const body = res.json();
+      expect(body.error).toContain("時間足");
+      expect(runBacktest).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("runs the backtest and returns 200 when the aggregated candle count is at or below the threshold (e.g. 5min)", async () => {
+    aggregateCandles.mockReturnValue(candles(100));
+    runBacktest.mockReturnValue({
+      candleCount: 100,
+      warnings: [],
+      realizedPnl: 0,
+      winCount: 0,
+      lossCount: 0,
+      winRate: null,
+      avgWin: null,
+      avgLoss: null,
+      profitFactor: null,
+      maxDrawdown: 0,
+      totalFeesJpy: 0,
+      grossPnlJpy: 0,
+      feeLossCount: 0,
+      equityCurve: [],
+      trades: [],
+      period: "three_months",
+    });
+    const app = await buildApp();
+    try {
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/strategies/backtest",
+        payload: { graph: basicGraph(), pair: config.targetPair, timeframe: "5min", period: "three_months" },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(runBacktest).toHaveBeenCalledTimes(1);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("returns 503 (snapshot not ready) when there are fewer than 2 aggregated candles, without calling runBacktest", async () => {
+    aggregateCandles.mockReturnValue(candles(1));
+    const app = await buildApp();
+    try {
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/strategies/backtest",
+        payload: { graph: basicGraph(), pair: config.targetPair, timeframe: "5min", period: "three_months" },
+      });
+
+      expect(res.statusCode).toBe(503);
+      expect(runBacktest).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
+  });
+});
+
 describe("POST /api/strategies/walk-forward", () => {
   beforeEach(() => {
     strategyFindMany.mockReset();
     getHistoricalCandles.mockReset();
-    aggregateCandles.mockClear();
+    // The three_months backtest tests above override aggregateCandles with a fixed
+    // mockReturnValue(); mockClear() alone doesn't undo that, so restore the real
+    // slicing implementation here to avoid leaking state across describe blocks.
+    aggregateCandles.mockReset().mockImplementation((raw: CandleBucket[], minutes: number) =>
+      raw.slice(0, Math.floor(raw.length / minutes))
+    );
     reloadActiveStrategies.mockReset();
     runWalkForwardForStrategy.mockReset();
     maxWindowsForBatch.mockReset().mockReturnValue(3);
