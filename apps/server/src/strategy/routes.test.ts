@@ -1,6 +1,104 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import Fastify from "fastify";
+import type { WalkForwardSummary } from "@noctas/shared";
 import { config } from "../config";
-import { validateRiskSettings } from "./routes";
+import type { CandleBucket } from "./botEngine";
+
+// routes.ts (and everything it transitively imports - botEngine.ts, historicalCandleStore.ts,
+// ai/*.ts) reaches "../db/prisma" at module scope; mock it here purely to avoid constructing a
+// real PrismaClient during the test run (matches the pattern in historicalCandleStore.test.ts).
+const strategyFindMany = vi.fn();
+vi.mock("../db/prisma", () => ({
+  prisma: { strategy: { findMany: (...args: unknown[]) => strategyFindMany(...args) } },
+}));
+
+const getHistoricalCandles = vi.fn<(pair: string) => Promise<CandleBucket[]>>();
+vi.mock("./historicalCandleStore", () => ({
+  getHistoricalCandles: (...args: [string]) => getHistoricalCandles(...args),
+}));
+
+// aggregateCandlesの集計の正しさそのものはbotEngine側でカバーされている。ここでの関心は
+// ルートがpair+timeframeの組み合わせごとに1回だけ呼び出す(キャッシュされる)ことなので、
+// 時間足(minutes)に応じて単純に件数を間引くだけの軽量なスタブに差し替える。
+const aggregateCandles = vi.fn((raw: CandleBucket[], minutes: number) =>
+  raw.slice(0, Math.floor(raw.length / minutes))
+);
+const reloadActiveStrategies = vi.fn();
+vi.mock("./botEngine", () => ({
+  aggregateCandles: (...args: [CandleBucket[], number]) => aggregateCandles(...args),
+  reloadActiveStrategies: (...args: unknown[]) => reloadActiveStrategies(...args),
+}));
+
+// runWalkForwardForStrategy自体の正しさ(ウィンドウ分割・グリッドサーチ・集計)は
+// walkForwardEngine.test.tsでカバーする。ここではルート側の責務(戦略の取得・検証・
+// スキップ判定・キャッシュ・警告集約)だけを見る
+const runWalkForwardForStrategy = vi.fn();
+const maxWindowsForBatch = vi.fn().mockReturnValue(3);
+vi.mock("./walkForwardEngine", () => ({
+  runWalkForwardForStrategy: (...args: unknown[]) => runWalkForwardForStrategy(...args),
+  maxWindowsForBatch: (...args: unknown[]) => maxWindowsForBatch(...args),
+}));
+
+const { validateRiskSettings, strategyRoutes } = await import("./routes");
+
+function candle(time: number): CandleBucket {
+  return { time, open: 1, high: 1, low: 1, close: 1, volume: 1 };
+}
+
+function candles(count: number): CandleBucket[] {
+  return Array.from({ length: count }, (_, i) => candle(i * 60));
+}
+
+const sufficientSummary: WalkForwardSummary = {
+  warnings: [],
+  windowCount: 1,
+  windows: [],
+  aggregate: {
+    outOfSampleRealizedPnl: 1000,
+    outOfSampleWinRate: 1,
+    outOfSampleProfitFactor: null,
+    outOfSampleMaxDrawdown: 0,
+    outOfSampleTrades: 1,
+    consistencyRatio: 1,
+  },
+};
+
+const insufficientSummary: WalkForwardSummary = {
+  warnings: ["dummy"],
+  windowCount: 0,
+  windows: [],
+  aggregate: {
+    outOfSampleRealizedPnl: 0,
+    outOfSampleWinRate: null,
+    outOfSampleProfitFactor: null,
+    outOfSampleMaxDrawdown: 0,
+    outOfSampleTrades: 0,
+    consistencyRatio: null,
+  },
+};
+
+async function buildApp() {
+  const app = Fastify();
+  await app.register(strategyRoutes);
+  await app.ready();
+  return app;
+}
+
+function strategyRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "s1",
+    name: "Strategy",
+    pair: "btc_jpy",
+    timeframe: "1min",
+    graph: JSON.stringify({ nodes: [], edges: [] }),
+    positionSizeJpy: null,
+    maxOpenPositions: null,
+    stopLossPct: null,
+    takeProfitPct: null,
+    trailingStopPct: null,
+    ...overrides,
+  };
+}
 
 describe("validateRiskSettings / positionSizeJpy cap", () => {
   it("accepts a positionSizeJpy at or below the AI_MAX_POSITION_JPY cap", () => {
@@ -52,5 +150,111 @@ describe("validateRiskSettings / other fields unaffected", () => {
     expect(validateRiskSettings({ maxOpenPositions: 0 })).not.toBeNull();
     expect(validateRiskSettings({ maxOpenPositions: 1.5 })).not.toBeNull();
     expect(validateRiskSettings({ maxOpenPositions: 3 })).toBeNull();
+  });
+});
+
+describe("POST /api/strategies/walk-forward", () => {
+  beforeEach(() => {
+    strategyFindMany.mockReset();
+    getHistoricalCandles.mockReset();
+    aggregateCandles.mockClear();
+    reloadActiveStrategies.mockReset();
+    runWalkForwardForStrategy.mockReset();
+    maxWindowsForBatch.mockReset().mockReturnValue(3);
+  });
+
+  it("returns 200 with an empty result and a warning when there are no active strategies (not an error state)", async () => {
+    strategyFindMany.mockResolvedValue([]);
+    const app = await buildApp();
+    try {
+      const res = await app.inject({ method: "POST", url: "/api/strategies/walk-forward" });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.activeStrategyCount).toBe(0);
+      expect(body.results).toEqual([]);
+      expect(body.warnings.some((w: string) => w.includes("アクティブな戦略がありません"))).toBe(true);
+      expect(getHistoricalCandles).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("skips a strategy with an unparseable graph and one with an unsupported pair, but still evaluates the rest", async () => {
+    strategyFindMany.mockResolvedValue([
+      strategyRow({ id: "s1", name: "Broken Graph", graph: "{not valid json" }),
+      strategyRow({ id: "s2", name: "Unsupported Pair", pair: "eth_jpy" }),
+      strategyRow({ id: "s3", name: "OK" }),
+    ]);
+    getHistoricalCandles.mockResolvedValue(candles(300));
+    runWalkForwardForStrategy.mockReturnValue(sufficientSummary);
+
+    const app = await buildApp();
+    try {
+      const res = await app.inject({ method: "POST", url: "/api/strategies/walk-forward" });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.activeStrategyCount).toBe(3);
+      expect(body.results).toHaveLength(1);
+      expect(body.results[0].strategyId).toBe("s3");
+      expect(body.warnings.some((w: string) => w.includes("パースできない"))).toBe(true);
+      expect(body.warnings.some((w: string) => w.includes("対象外"))).toBe(true);
+      // eth_jpy is rejected before any candle fetch is attempted for it
+      expect(getHistoricalCandles).toHaveBeenCalledTimes(1);
+      expect(getHistoricalCandles).toHaveBeenCalledWith("btc_jpy");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("excludes a strategy whose snapshot has too few candles for a single window, while others still succeed", async () => {
+    strategyFindMany.mockResolvedValue([
+      strategyRow({ id: "s1", name: "Sparse", timeframe: "5min" }),
+      strategyRow({ id: "s2", name: "Dense", timeframe: "1min" }),
+    ]);
+    getHistoricalCandles.mockResolvedValue(candles(300));
+    runWalkForwardForStrategy.mockImplementation((..._args: unknown[]) => {
+      const usedCandles = _args[5] as CandleBucket[];
+      return usedCandles.length >= 100 ? sufficientSummary : insufficientSummary;
+    });
+
+    const app = await buildApp();
+    try {
+      const res = await app.inject({ method: "POST", url: "/api/strategies/walk-forward" });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.results).toHaveLength(1);
+      expect(body.results[0].strategyId).toBe("s2");
+      expect(body.warnings.some((w: string) => w.includes("スナップショットが不足"))).toBe(true);
+      // same pair (btc_jpy) shared by both strategies -> the raw snapshot is fetched only once
+      expect(getHistoricalCandles).toHaveBeenCalledTimes(1);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("passes maxWindowsForBatch(activeStrategyCount) through to each strategy's window cap", async () => {
+    strategyFindMany.mockResolvedValue([
+      strategyRow({ id: "s1", positionSizeJpy: 5000, maxOpenPositions: 2, stopLossPct: 3, takeProfitPct: 5 }),
+    ]);
+    getHistoricalCandles.mockResolvedValue(candles(300));
+    maxWindowsForBatch.mockReturnValue(6);
+    runWalkForwardForStrategy.mockReturnValue(sufficientSummary);
+
+    const app = await buildApp();
+    try {
+      await app.inject({ method: "POST", url: "/api/strategies/walk-forward" });
+      expect(maxWindowsForBatch).toHaveBeenCalledWith(1);
+      expect(runWalkForwardForStrategy).toHaveBeenCalledWith(
+        { nodes: [], edges: [] },
+        "btc_jpy",
+        "1min",
+        5000,
+        2,
+        expect.any(Array),
+        6
+      );
+    } finally {
+      await app.close();
+    }
   });
 });
