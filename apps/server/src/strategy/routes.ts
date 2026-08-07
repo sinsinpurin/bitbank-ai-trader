@@ -13,7 +13,7 @@ import {
 import { prisma } from "../db/prisma";
 import { aggregateCandles, reloadActiveStrategies } from "./botEngine";
 import { getHistoricalCandles } from "./historicalCandleStore";
-import { runBacktest } from "./backtestEngine";
+import { runBacktest, THREE_MONTH_BACKTEST_MAX_CANDLES } from "./backtestEngine";
 import { broadcast } from "../ws/relay";
 import { generateStrategyFromPrompt } from "../ai/strategyGenerator";
 import { getAnthropicApiKey } from "../ai/anthropicClient";
@@ -202,6 +202,11 @@ export async function strategyRoutes(app: FastifyInstance) {
         period === "three_months"
           ? aggregateCandles(await getHistoricalCandles(pair), minutesOfTimeframe(timeframe))
           : undefined;
+      if (period === "three_months" && candlesOverride && candlesOverride.length > THREE_MONTH_BACKTEST_MAX_CANDLES) {
+        return reply.status(400).send({
+          error: `3ヶ月シミュレーションはこの時間足(${timeframe})だと${candlesOverride.length}本のローソク足を評価する必要があり、計算量(runBacktestの特性上O(n²))的にサーバー全体を長時間ブロックしてしまうため実行できません。5分足以上の粗い時間足を選択して再実行してください。`,
+        });
+      }
       if (period === "three_months" && (!candlesOverride || candlesOverride.length < 2)) {
         return reply.status(503).send({ error: "3-month candle snapshot is not ready yet; please retry after the next sync" });
       }

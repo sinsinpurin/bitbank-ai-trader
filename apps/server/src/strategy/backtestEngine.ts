@@ -24,6 +24,20 @@ import { resolveExitReason } from "../trading/riskManager";
  * - JPY残高・同時保有できる資産量などの資金制約はシミュレートしない(maxOpenPositionsのみ適用)
  */
 
+/**
+ * runBacktest()はローソク足1本ごとにevaluateGraph()をゼロから再計算する(インクリメンタル評価ではない)
+ * ため、実質O(n²)の計算量特性を持つ。実測では90日分(1分足で129,600本)を評価すると約32.9秒かかり、
+ * その間await/yieldが一切無い単一の同期呼び出しになるためNode.jsのイベントループを丸ごと専有し、
+ * 他のHTTPリクエスト・WebSocket tick処理も含めてサーバー全体が応答不能になる(単なる「遅い」では済まない)。
+ *
+ * この定数は「3ヶ月シミュレーション(period: "three_months")」のリクエストを、この危険域に入る前に
+ * 400で拒否するための閾値。5分足=90日で25,920本は通し、1分足=90日で129,600本は拒否する境界として
+ * 35,000を選んでいる。根本解決(インクリメンタル評価への書き換え)は別issueのスコープとし、ここでは
+ * 危険な本数のリクエストを事前に弾く応急処置のみを行う(routes.tsの/api/strategies/backtestハンドラ側で
+ * この定数を使ってrunBacktest呼び出し自体をスキップする)。
+ */
+export const THREE_MONTH_BACKTEST_MAX_CANDLES = 35_000;
+
 interface OpenSimPosition {
   entryPrice: number;
   amount: number;
